@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { prisma } from "./prisma";
 import { appUrl } from "./utils";
 import { cronSecret } from "./cron-auth";
-import { DEFAULT_QUERIES, discoverUrls, usesLegacySearchQueries } from "./discover";
+import { discoverUrls, queryPool, usesLegacySearchQueries } from "./discover";
 import { extractSkPhones } from "./phone";
 import { contactPathCandidates, scoreOutdatedSite } from "./site-score";
 import { canonicalizeUrl, fetchHtml, hostOf } from "./web-fetch";
@@ -36,18 +36,33 @@ async function scheduleNextTick(delayMs: number) {
 export async function ensureHarvestJob() {
   const existing = await prisma.harvestJob.findUnique({ where: { id: "default" } });
   if (existing) {
-    if (usesLegacySearchQueries(existing.queries)) {
-      return prisma.harvestJob.update({
-        where: { id: "default" },
-        data: { queries: DEFAULT_QUERIES, queryIndex: 0, lastError: null },
-      });
+    const bundledCatalog = existing.queries.length >= 10 && existing.queries.every((query) =>
+      query.includes("zoznam.sk/katalog") || query.includes("azet.sk/katalog"),
+    );
+    const patch: {
+      queries?: string[];
+      sources?: string[];
+      queryIndex?: number;
+      lastError?: string | null;
+    } = {};
+    if (usesLegacySearchQueries(existing.queries) || bundledCatalog) {
+      patch.queries = [];
+      patch.queryIndex = 0;
+      patch.lastError = null;
+    }
+    if (!existing.sources.length) {
+      patch.sources = ["zoznam", "azet"];
+    }
+    if (Object.keys(patch).length) {
+      return prisma.harvestJob.update({ where: { id: "default" }, data: patch });
     }
     return existing;
   }
   return prisma.harvestJob.create({
     data: {
       id: "default",
-      queries: DEFAULT_QUERIES,
+      queries: [],
+      sources: ["zoznam", "azet"],
     },
   });
 }
@@ -343,7 +358,7 @@ export async function tickHarvest() {
   });
 
   if (!queued) {
-    const queries = job.queries.length ? job.queries : DEFAULT_QUERIES;
+    const queries = queryPool(job.sources, job.queries);
     let enqueued = 0;
     let used = 0;
     for (let i = 0; i < Math.min(5, queries.length); i += 1) {

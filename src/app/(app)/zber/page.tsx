@@ -1,7 +1,7 @@
 import { Pause, Play, Square } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { ensureHarvestJob } from "@/lib/harvest";
-import { DEFAULT_QUERIES } from "@/lib/discover";
+import { HARVEST_SOURCES } from "@/lib/discover";
 import {
   pauseHarvestAction,
   resumeHarvestAction,
@@ -24,9 +24,9 @@ export default async function HarvestPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Zber čísiel</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-500">
-          Beží bez AI. Berie firmy z katalógu Zoznam.sk, zmeria rýchlosť ich vlastného webu a podľa
-          pevných pravidiel nechá len zastaralé, škaredé alebo inak zlé stránky. Pomalé weby idú
-          mimo. Telefón sa uloží len raz, v tvare +421…
+          Beží bez AI. Vie zbierať weby zo <strong>Zoznam.sk</strong> aj <strong>Azet.sk</strong>.
+          Potom zmeria rýchlosť ich vlastnej stránky a podľa pevných pravidiel nechá len zastaralé,
+          škaredé alebo inak zlé weby. Pomalé idú mimo. Telefón sa uloží len raz, v tvare +421…
         </p>
       </div>
 
@@ -80,12 +80,34 @@ export default async function HarvestPage() {
           <li>Next.js, Shopify, Webflow a podobné weby sa zahodia ako príliš moderné.</li>
           <li>Berú sa len .sk weby s verejným SK číslom. 0800/0900 sa ignorujú.</li>
           <li>URL aj telefón majú unikátny kľúč — to isté číslo sa neuloží dvakrát.</li>
+          <li>Zdroje: Zoznam.sk (firmy) a Azet.sk (katalóg webov) — zapneš ich v nastavení.</li>
           <li>Nájdené kontakty idú do kampane „Zber zo zastaraných webov“, ak je to zapnuté.</li>
         </ul>
       </section>
 
       <form action={saveHarvestSettingsAction} className="grid gap-3 rounded-2xl border border-border bg-white p-5">
         <h2 className="font-semibold">Nastavenie zberu</h2>
+        <fieldset className="grid gap-2 sm:grid-cols-2">
+          <legend className="mb-1 text-sm font-medium">Zdroje webov</legend>
+          {HARVEST_SOURCES.map((source) => (
+            <label
+              key={source.id}
+              className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-border bg-muted/50 px-3 py-3 text-sm"
+            >
+              <input
+                type="checkbox"
+                name="sources"
+                value={source.id}
+                defaultChecked={job.sources.includes(source.id) || job.sources.length === 0}
+                className="mt-1"
+              />
+              <span>
+                <span className="font-medium">{source.label}</span>
+                <span className="mt-0.5 block text-xs text-slate-500">{source.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm">
             Max. načítanie (ms)
@@ -129,12 +151,13 @@ export default async function HarvestPage() {
           Pridávať čísla do kampane na volanie
         </label>
         <label className="text-sm">
-          Dopyty / kategórie (jedna URL katalógu Zoznam.sk na riadok)
+          Ďalšie URL katalógov (voliteľné, jedna na riadok)
           <textarea
             name="queries"
-            rows={6}
-            defaultValue={(job.queries.length ? job.queries : DEFAULT_QUERIES).join("\n")}
+            rows={4}
+            defaultValue={job.queries.join("\n")}
             className="mt-1 w-full rounded-lg border border-border p-3 font-mono text-xs"
+            placeholder={"https://www.azet.sk/katalog/…\nhttps://www.zoznam.sk/katalog/…"}
           />
         </label>
         <button className="min-h-11 max-w-xs rounded-lg bg-primary px-4 text-sm font-semibold text-white">

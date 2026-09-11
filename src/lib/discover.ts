@@ -1,7 +1,21 @@
 import { canonicalizeUrl, fetchHtml, hostOf } from "./web-fetch";
 
-/** Katalóg Zoznam.sk — verejné weby malých firiem. Vyhľadávače z Vercelu blokujú botov. */
-export const DEFAULT_QUERIES = [
+export const HARVEST_SOURCES = [
+  {
+    id: "zoznam",
+    label: "Zoznam.sk",
+    hint: "Katalóg malých firiem a remesiel",
+  },
+  {
+    id: "azet",
+    label: "Azet.sk",
+    hint: "Katalóg slovenských webov",
+  },
+] as const;
+
+export type HarvestSourceId = (typeof HARVEST_SOURCES)[number]["id"];
+
+export const ZOZNAM_QUERIES = [
   "https://www.zoznam.sk/katalog/Sluzby-remesla/Hodinarstva/",
   "https://www.zoznam.sk/katalog/Sluzby-remesla/Brusenie-nozov/",
   "https://www.zoznam.sk/katalog/Sluzby-remesla/Hodinovy-manzel/",
@@ -28,6 +42,26 @@ export const DEFAULT_QUERIES = [
   "https://www.zoznam.sk/katalog/Cestovanie-ubytovanie-turizmus/Ubytovanie/Autokempy/",
   "https://www.zoznam.sk/katalog/Auto-moto-preprava-logistika/Autobazare-dovoz-automobilov/",
 ];
+
+export const AZET_QUERIES = [
+  "https://www.azet.sk/katalog/fotografovanie/",
+  "https://www.azet.sk/katalog/fotografovanie/2/",
+  "https://www.azet.sk/katalog/remesla/",
+  "https://www.azet.sk/katalog/remesla/2/",
+  "https://www.azet.sk/katalog/auto-moto/",
+  "https://www.azet.sk/katalog/auto-moto/2/",
+  "https://www.azet.sk/katalog/bazare/",
+  "https://www.azet.sk/katalog/byvanie-a-zahrada/",
+  "https://www.azet.sk/katalog/fitness-centra/",
+  "https://www.azet.sk/katalog/graficke-studia/",
+  "https://www.azet.sk/katalog/autobazare/",
+  "https://www.azet.sk/katalog/cestovne-kancelarie-a-zajazdy/",
+  "https://www.azet.sk/katalog/dlazby-a-obklady_4/",
+  "https://www.azet.sk/katalog/ambulancie-a-lekari/",
+];
+
+/** @deprecated použije sa, keď nie je vybraný žiadny zdroj */
+export const DEFAULT_QUERIES = [...ZOZNAM_QUERIES, ...AZET_QUERIES];
 
 const BLOCKED_HOSTS = [
   "google.com",
@@ -58,6 +92,8 @@ const BLOCKED_HOSTS = [
   "zoznam.sk",
   "topky.sk",
   "azet.sk",
+  "aimg.sk",
+  "ringier.sk",
   "websupport.sk",
   "callbot-crm.vercel.app",
 ];
@@ -94,6 +130,21 @@ function extractCompanySites(html: string, pageUrl: string): string[] {
   return out;
 }
 
+function extractAzetProfiles(html: string, pageUrl: string): string[] {
+  const hrefs = [...html.matchAll(/href=["']([^"']+)["']/gi)].map((m) => m[1].replace(/&amp;/g, "&"));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of hrefs) {
+    const absolute = absolutize(raw, pageUrl);
+    if (!absolute || !/azet\.sk\/firma\/\d+/.test(absolute)) continue;
+    const canonical = canonicalizeUrl(absolute.split("#")[0]);
+    if (!canonical || seen.has(canonical)) continue;
+    seen.add(canonical);
+    out.push(canonical);
+  }
+  return out;
+}
+
 function extractLeafCategories(html: string, pageUrl: string): string[] {
   const hrefs = [...html.matchAll(/href=["']([^"']+)["']/gi)].map((m) => m[1].replace(/&amp;/g, "&"));
   const out: string[] = [];
@@ -111,36 +162,51 @@ function extractLeafCategories(html: string, pageUrl: string): string[] {
   return out;
 }
 
-function directoryUrlFor(query: string) {
-  const trimmed = query.trim();
-  if (trimmed.startsWith("http")) return trimmed;
-  const hint = trimmed.toLowerCase();
-  const match = DEFAULT_QUERIES.find((url) => {
-    const slug = url.split("/katalog/")[1] ?? "";
-    return hint.split(/\s+/).some((word) => word.length > 4 && slug.toLowerCase().includes(word.slice(0, 6)));
-  });
-  return match ?? DEFAULT_QUERIES[0];
+export function queryPool(sources: string[], extraQueries: string[]) {
+  const selected = sources.length ? sources : ["zoznam", "azet"];
+  const pool: string[] = [];
+  if (selected.includes("zoznam")) pool.push(...ZOZNAM_QUERIES);
+  if (selected.includes("azet")) pool.push(...AZET_QUERIES);
+  for (const query of extraQueries) {
+    const trimmed = query.trim();
+    if (!trimmed.startsWith("http")) continue;
+    if (pool.includes(trimmed)) continue;
+    pool.push(trimmed);
+  }
+  return pool.length ? pool : DEFAULT_QUERIES;
 }
 
 export function usesLegacySearchQueries(queries: string[]) {
-  if (!queries.length) return true;
-  return queries.every((query) => !query.includes("zoznam.sk/katalog"));
+  if (!queries.length) return false;
+  return queries.every((query) => !query.startsWith("http"));
 }
 
 export async function discoverUrls(query: string, maxMs = 6000): Promise<string[]> {
-  const url = directoryUrlFor(query);
+  const url = query.trim();
+  if (!url.startsWith("http")) return [];
   const page = await fetchHtml(url, maxMs);
   if (!page.ok) return [];
 
   let sites = extractCompanySites(page.html, page.finalUrl);
-  if (sites.length > 0) return sites.slice(0, 30);
 
-  const leaves = extractLeafCategories(page.html, page.finalUrl);
-  for (const leaf of leaves.slice(0, 2)) {
-    const nested = await fetchHtml(leaf, maxMs);
-    if (!nested.ok) continue;
-    sites = extractCompanySites(nested.html, nested.finalUrl);
-    if (sites.length) return sites.slice(0, 30);
+  if (url.includes("azet.sk/katalog") && sites.length < 8) {
+    const profiles = extractAzetProfiles(page.html, page.finalUrl).slice(0, 3);
+    for (const profile of profiles) {
+      const nested = await fetchHtml(profile, maxMs);
+      if (!nested.ok) continue;
+      sites.push(...extractCompanySites(nested.html, nested.finalUrl));
+    }
   }
-  return [];
+
+  if (sites.length === 0 && url.includes("zoznam.sk/katalog")) {
+    const leaves = extractLeafCategories(page.html, page.finalUrl);
+    for (const leaf of leaves.slice(0, 2)) {
+      const nested = await fetchHtml(leaf, maxMs);
+      if (!nested.ok) continue;
+      sites = extractCompanySites(nested.html, nested.finalUrl);
+      if (sites.length) break;
+    }
+  }
+
+  return [...new Set(sites)].slice(0, 30);
 }

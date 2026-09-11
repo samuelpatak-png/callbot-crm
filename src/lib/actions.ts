@@ -10,7 +10,6 @@ import { normalizeSkPhone } from "./phone";
 import { getVoiceProvider } from "./voice";
 import { pauseCampaign, resumeCampaign, startCampaign, stopCampaign } from "./dialer";
 import { pauseHarvest, resumeHarvest, startHarvest, stopHarvest, ensureHarvestJob } from "./harvest";
-import { DEFAULT_QUERIES } from "./discover";
 
 const phoneSchema = z
   .string()
@@ -473,6 +472,10 @@ export async function saveHarvestSettingsAction(formData: FormData) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+  const sources = formData
+    .getAll("sources")
+    .map((value) => String(value))
+    .filter((value) => value === "zoznam" || value === "azet");
   await prisma.harvestJob.update({
     where: { id: "default" },
     data: {
@@ -481,7 +484,8 @@ export async function saveHarvestSettingsAction(formData: FormData) {
       delayMs: Math.max(1500, Number(formData.get("delayMs") || 3500)),
       targetNewContacts: Math.max(1, Number(formData.get("targetNewContacts") || 400)),
       attachToCampaign: formData.get("attachToCampaign") === "on",
-      queries: queries.length ? queries : DEFAULT_QUERIES,
+      sources: sources.length ? sources : ["zoznam", "azet"],
+      queries,
     },
   });
   revalidatePath("/zber");

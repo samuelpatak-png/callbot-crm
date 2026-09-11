@@ -367,6 +367,7 @@ model HarvestJob {
   lastRunAt          DateTime?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+  sources            String[]       @default(["zoznam", "azet"])
   sites              HarvestedSite[]
 
   @@index([status])
