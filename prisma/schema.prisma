@@ -270,6 +270,7 @@ model Call {
   summary         String?
   agentInstructions String?
   realtimeSessionId String?
+  debrief           Json?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

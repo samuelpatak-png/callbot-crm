@@ -1,11 +1,11 @@
 import { after } from "next/server";
-import type { CallStatus, ContactStatus } from "@prisma/client";
 import { prisma } from "./prisma";
 import { appUrl } from "./utils";
 import { getVoiceProvider } from "./voice";
 import { cronSecret } from "./cron-auth";
 import { buildCallBriefing } from "./agent-briefing";
 import { loadPlaybookIntoRealtime } from "./openai-agent";
+import { applyCallDebrief } from "./call-debrief";
 
 function inWorkingHours(start: string, end: string, timeZone: string) {
   const now = new Date();
@@ -19,16 +19,6 @@ function inWorkingHours(start: string, end: string, timeZone: string) {
   const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
   const current = `${hour}:${minute}`;
   return current >= start && current <= end;
-}
-
-function contactStatusFromOutcome(outcome: string, callStatus: CallStatus): ContactStatus {
-  if (outcome === "interested") return "INTERESTED";
-  if (outcome === "connected") return "CONNECTED";
-  if (callStatus === "NO_ANSWER") return "NO_ANSWER";
-  if (callStatus === "VOICEMAIL") return "VOICEMAIL";
-  if (callStatus === "BUSY") return "CALLBACK";
-  if (callStatus === "FAILED") return "FAILED";
-  return "CONNECTED";
 }
 
 async function scheduleNextTick(delayMs: number) {
@@ -121,6 +111,7 @@ export async function tickDialer() {
     to: member.contact.phone,
     from: settings.twilioFromNumber,
     contactId: member.contactId,
+    contactName: `${member.contact.firstName} ${member.contact.lastName}`.trim(),
     campaignId: campaign.id,
     callId: call.id,
     scriptPrompt: campaign.scriptPrompt,
@@ -129,49 +120,22 @@ export async function tickDialer() {
     twilioAuthToken: settings.twilioAuthToken,
   });
 
-  const nextStatus = contactStatusFromOutcome(result.outcome, result.status);
   const retry = member.attempts + 1 < campaign.retryAttempts && ["NO_ANSWER", "BUSY", "FAILED"].includes(result.status);
 
-  await prisma.$transaction([
-    prisma.call.update({
-      where: { id: call.id },
-      data: {
-        status: result.status,
-        outcome: result.outcome,
-        durationSec: result.durationSec,
-        endedAt: new Date(),
-        provider: result.provider,
-        providerCallSid: result.providerCallSid,
-        transcript: result.transcript,
-        summary: realtime.loaded
-          ? `${result.summary} ChatGPT Realtime má načítaný skript.`
-          : result.summary,
-      },
-    }),
-    prisma.contact.update({
-      where: { id: member.contactId },
-      data: {
-        status: nextStatus,
-        lastCalledAt: new Date(),
-        nextFollowUpAt:
-          nextStatus === "CALLBACK" || nextStatus === "NO_ANSWER"
-            ? new Date(Date.now() + 1000 * 60 * 60 * 24)
-            : undefined,
-      },
-    }),
-    prisma.campaignMember.update({
-      where: { id: member.id },
-      data: { status: retry ? "PENDING" : result.status === "FAILED" ? "FAILED" : "COMPLETED" },
-    }),
-    prisma.activity.create({
-      data: {
-        type: "CALL",
-        contactId: member.contactId,
-        message: `Automatický hovor: ${result.outcome} (${result.provider})`,
-        payload: { campaignId: campaign.id, sid: result.providerCallSid },
-      },
-    }),
-  ]);
+  await applyCallDebrief({
+    callId: call.id,
+    contactId: member.contactId,
+    contactName: `${member.contact.firstName} ${member.contact.lastName}`.trim(),
+    result,
+    transcript: result.transcript,
+    campaignId: campaign.id,
+    realtimeLoaded: realtime.loaded,
+  });
+
+  await prisma.campaignMember.update({
+    where: { id: member.id },
+    data: { status: retry ? "PENDING" : result.status === "FAILED" ? "FAILED" : "COMPLETED" },
+  });
 
   const remaining = await prisma.campaignMember.count({
     where: { campaignId: campaign.id, status: "PENDING" },

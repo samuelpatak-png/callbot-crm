@@ -7,7 +7,7 @@ import {
   placeCallAction,
   updateContactAction,
 } from "@/lib/actions";
-import { contactStatusLabel, contactStatusTone, formatDateTime } from "@/lib/utils";
+import { contactStatusLabel, contactStatusTone, callOutcomeLabel, formatDateTime } from "@/lib/utils";
 
 export default async function ContactDetailPage({
   params,
@@ -130,6 +130,33 @@ export default async function ContactDetailPage({
         </form>
 
         <div className="rounded-2xl border border-border bg-white p-5">
+          <h2 className="mb-3 font-semibold">Hovory</h2>
+          {contact.calls.length === 0 ? (
+            <p className="text-sm text-slate-500">Zatiaľ žiadny hovor. Po volaní sa tu objaví zhrnutie a prepis.</p>
+          ) : (
+            <ol className="space-y-4">
+              {contact.calls.map((call) => (
+                <li key={call.id} className="border-l-2 border-slate-200 pl-3 text-sm">
+                  <p className="font-medium">
+                    {callOutcomeLabel(call.outcome)} · {call.durationSec}s
+                  </p>
+                  <p className="text-xs text-slate-500">{formatDateTime(call.startedAt)}</p>
+                  {call.summary ? <p className="mt-1 text-slate-700">{call.summary}</p> : null}
+                  {call.transcript ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs font-medium text-primary">Prepis</summary>
+                      <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs leading-5 text-slate-700">
+                        {call.transcript}
+                      </pre>
+                    </details>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-border bg-white p-5">
           <h2 className="mb-3 font-semibold">Časová os</h2>
           <ol className="space-y-3">
             {contact.activities.map((item) => (
@@ -144,14 +171,6 @@ export default async function ContactDetailPage({
                 <p className="text-xs text-slate-500">
                   {note.author?.name || "Systém"} · {formatDateTime(note.createdAt)}
                 </p>
-              </li>
-            ))}
-            {contact.calls.map((call) => (
-              <li key={call.id} className="border-l-2 border-slate-200 pl-3 text-sm">
-                <p className="font-medium">
-                  Hovor {call.outcome || call.status} · {call.durationSec}s
-                </p>
-                <p className="text-xs text-slate-500">{call.summary || formatDateTime(call.startedAt)}</p>
               </li>
             ))}
           </ol>

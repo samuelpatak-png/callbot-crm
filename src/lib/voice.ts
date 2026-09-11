@@ -4,6 +4,7 @@ export type PlaceCallInput = {
   to: string;
   from?: string | null;
   contactId: string;
+  contactName?: string | null;
   campaignId?: string | null;
   callId?: string | null;
   scriptPrompt?: string | null;
@@ -33,7 +34,8 @@ const OUTCOMES: Array<{
   weight: number;
   duration: [number, number];
 }> = [
-  { status: "COMPLETED", outcome: "connected", weight: 28, duration: [45, 180] },
+  { status: "COMPLETED", outcome: "connected", weight: 18, duration: [45, 180] },
+  { status: "COMPLETED", outcome: "not_interested", weight: 10, duration: [40, 120] },
   { status: "NO_ANSWER", outcome: "no_answer", weight: 32, duration: [8, 22] },
   { status: "VOICEMAIL", outcome: "voicemail", weight: 18, duration: [12, 40] },
   { status: "BUSY", outcome: "busy", weight: 10, duration: [3, 8] },
@@ -55,6 +57,35 @@ function randInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function openingFrom(instructions?: string | null) {
+  const match = instructions?.match(/„([^”]+)“/);
+  return match?.[1]?.trim() || "Dobrý deň, volám z CallBotu. Neruším vás na dve minúty?";
+}
+
+function stubTranscript(outcome: string, name: string, instructions?: string | null) {
+  const opening = openingFrom(instructions);
+  const who = name || "pán / pani";
+  if (outcome === "interested") {
+    return `Agent: ${opening}\n${who}: Dobrý deň, počúvam.\nAgent: Volám, či máte chvíľu na krátku otázku k odchádzajúcim hovorom.\n${who}: Teraz áno. Znie to použiteľne, pošlite mi to ešte písomne.\nAgent: Ďakujem, dohodneme termín a pošleme podklady.`;
+  }
+  if (outcome === "no_answer") {
+    return `Agent: ${opening}\n(nikto nezdvihol, hovor sa po niekoľkých zazvoneniach ukončil)`;
+  }
+  if (outcome === "voicemail") {
+    return `Agent: ${opening}\nZáznamník: Zanechajte odkaz po signáli.\nAgent: Volám z CallBotu, ozvem sa neskôr.`;
+  }
+  if (outcome === "busy") {
+    return `(linka obsadená, hovor sa nespojil)`;
+  }
+  if (outcome === "failed") {
+    return `(hovor sa nepodarilo spojiť)`;
+  }
+  if (outcome === "not_interested") {
+    return `Agent: ${opening}\n${who}: Ďakujem, teraz nemám záujem, ozvite sa inokedy.\nAgent: Rozumiem, ďakujem za čas.`;
+  }
+  return `Agent: ${opening}\n${who}: Počúvam, povedzte stručne.\nAgent: Volám kvôli odchádzajúcim hovorom, či máte chvíľu.\n${who}: Zatiaľ sa nerozhodnem, pošlite mi to ešte písomne.\nAgent: Ďakujem, pošleme podklady.`;
+}
+
 export class StubVoiceProvider implements VoiceProvider {
   kind: VoiceProviderKind = "STUB";
 
@@ -62,10 +93,12 @@ export class StubVoiceProvider implements VoiceProvider {
     const picked = pickOutcome();
     const durationSec = randInt(picked.duration[0], picked.duration[1]);
     const sid = `stub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const name = input.contactName?.trim() || input.to;
+    const transcript = stubTranscript(picked.outcome, name, input.instructions);
     const summary =
       picked.outcome === "interested"
-        ? `Simulovaný hovor na ${input.to}: kontakt prejavil záujem. Pripravené na ChatGPT Realtime.`
-        : `Simulovaný hovor na ${input.to}: výsledok ${picked.outcome}. Twilio a ChatGPT Live API sa napoja neskôr.`;
+        ? `Simulovaný hovor na ${input.to}: kontakt prejavil záujem.`
+        : `Simulovaný hovor na ${input.to}: výsledok ${picked.outcome}.`;
 
     return {
       provider: "STUB",
@@ -74,7 +107,7 @@ export class StubVoiceProvider implements VoiceProvider {
       outcome: picked.outcome,
       durationSec,
       summary,
-      transcript: `[stub] Dial ${input.to} · ${picked.outcome}`,
+      transcript,
     };
   }
 }

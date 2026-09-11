@@ -12,6 +12,7 @@ import { pauseCampaign, resumeCampaign, startCampaign, stopCampaign } from "./di
 import { pauseHarvest, resumeHarvest, startHarvest, stopHarvest, ensureHarvestJob } from "./harvest";
 import { buildCallBriefing, parseObjections } from "./agent-briefing";
 import { loadPlaybookIntoRealtime, rehearseWithChatGpt } from "./openai-agent";
+import { applyCallDebrief } from "./call-debrief";
 
 const phoneSchema = z
   .string()
@@ -222,54 +223,27 @@ export async function placeCallAction(formData: FormData) {
     to: contact.phone,
     from: settings.twilioFromNumber,
     contactId,
+    contactName: `${contact.firstName} ${contact.lastName}`.trim(),
     callId: call.id,
     instructions: briefing.instructions,
     twilioAccountSid: settings.twilioAccountSid,
     twilioAuthToken: settings.twilioAuthToken,
   });
 
-  await prisma.call.update({
-    where: { id: call.id },
-    data: {
-      status: result.status,
-      outcome: result.outcome,
-      durationSec: result.durationSec,
-      endedAt: new Date(),
-      provider: result.provider,
-      providerCallSid: result.providerCallSid,
-      transcript: result.transcript,
-      summary: realtime.loaded
-        ? `${result.summary} ChatGPT Realtime má načítaný skript.`
-        : result.summary,
-    },
-  });
-
-  const nextStatus =
-    result.outcome === "interested"
-      ? "INTERESTED"
-      : result.status === "NO_ANSWER"
-        ? "NO_ANSWER"
-        : result.status === "VOICEMAIL"
-          ? "VOICEMAIL"
-          : result.status === "FAILED"
-            ? "FAILED"
-            : "CONNECTED";
-
-  await prisma.contact.update({
-    where: { id: contactId },
-    data: { status: nextStatus, lastCalledAt: new Date() },
-  });
-  await prisma.activity.create({
-    data: {
-      type: "CALL",
-      contactId,
-      userId: session.id,
-      message: `Manuálny hovor: ${result.outcome}`,
-    },
+  await applyCallDebrief({
+    callId: call.id,
+    contactId,
+    contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+    result,
+    transcript: result.transcript,
+    agentId: session.id,
+    realtimeLoaded: realtime.loaded,
   });
 
   revalidatePath(`/kontakty/${contactId}`);
+  revalidatePath("/kontakty");
   revalidatePath("/hovory");
+  revalidatePath("/ulohy");
 }
 
 export async function createCampaignAction(formData: FormData) {

@@ -106,6 +106,24 @@ export const callStatusLabel: Record<CallStatus, string> = {
   CANCELED: "Zrušený",
 };
 
+export function callOutcomeLabel(outcome?: string | null) {
+  if (!outcome) return "—";
+  const labels: Record<string, string> = {
+    interested: "Záujem",
+    connected: "Spojený",
+    no_answer: "Nezdvihol",
+    voicemail: "Záznamník",
+    busy: "Obsadené",
+    failed: "Zlyhalo",
+    twilio_error: "Chyba Twilio",
+    not_interested: "Bez záujmu",
+    dnc: "Nevolať",
+    callback: "Spätné volanie",
+    queued: "V poradí",
+  };
+  return labels[outcome] ?? outcome;
+}
+
 export function isCallable(status: ContactStatus, doNotCall: boolean) {
   if (doNotCall || status === "DNC") return false;
   return status !== "CALLING";
