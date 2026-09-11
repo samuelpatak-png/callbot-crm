@@ -14,13 +14,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     orderBy: { updatedAt: "desc" },
     select: { status: true },
   });
+  const harvest = await prisma.harvestJob.findUnique({
+    where: { id: "default" },
+    select: { status: true },
+  });
 
   const automation =
-    running?.status === "RUNNING"
+    running?.status === "RUNNING" || harvest?.status === "RUNNING"
       ? "RUNNING"
-      : running?.status === "PAUSED"
+      : running?.status === "PAUSED" || harvest?.status === "PAUSED"
         ? "PAUSED"
-        : running?.status === "STOPPED"
+        : running?.status === "STOPPED" || harvest?.status === "STOPPED"
           ? "STOPPED"
           : "IDLE";
 

@@ -1,4 +1,5 @@
-import { ContactStatus, CampaignStatus, DealStage, CallStatus } from "@prisma/client";
+import { ContactStatus, CampaignStatus, DealStage, CallStatus, HarvestStatus, HarvestSiteStatus } from "@prisma/client";
+export { formatPhone } from "./phone";
 
 export function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -6,10 +7,6 @@ export function cn(...parts: Array<string | false | null | undefined>) {
 
 export function fullName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim();
-}
-
-export function formatPhone(phone: string) {
-  return phone.replace(/\s+/g, "");
 }
 
 export function formatDateTime(value: Date | string | null | undefined) {
@@ -113,3 +110,21 @@ export function isCallable(status: ContactStatus, doNotCall: boolean) {
   if (doNotCall || status === "DNC") return false;
   return status !== "CALLING";
 }
+
+export const harvestStatusLabel: Record<HarvestStatus, string> = {
+  IDLE: "Neaktívny",
+  RUNNING: "Beží",
+  PAUSED: "Pozastavený",
+  STOPPED: "Zastavený",
+  COMPLETED: "Cieľ splnený",
+};
+
+export const harvestSiteStatusLabel: Record<HarvestSiteStatus, string> = {
+  QUEUED: "V poradí",
+  ADDED: "Pridané číslo",
+  SKIPPED_SLOW: "Pomalý web",
+  SKIPPED_MODERN: "Príliš moderný",
+  SKIPPED_NO_PHONE: "Bez telefónu",
+  DUPLICATE: "Duplicitné číslo",
+  FAILED: "Zlyhalo",
+};

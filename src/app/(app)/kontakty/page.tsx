@@ -97,6 +97,7 @@ export default async function ContactsPage({
               <th className="px-4 py-3">Kontakt</th>
               <th className="px-4 py-3">Číslo</th>
               <th className="px-4 py-3">Firma</th>
+              <th className="px-4 py-3">Zdroj</th>
               <th className="px-4 py-3">Stav</th>
               <th className="px-4 py-3">Follow-up</th>
               <th className="px-4 py-3" />
@@ -113,6 +114,7 @@ export default async function ContactsPage({
                 </td>
                 <td className="number-mono px-4 py-3">{contact.phone}</td>
                 <td className="px-4 py-3">{contact.company?.name || "—"}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{contact.source || "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-1 text-xs font-medium ${contactStatusTone[contact.status]}`}>
                     {contactStatusLabel[contact.status]}

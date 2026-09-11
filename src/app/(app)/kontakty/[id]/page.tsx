@@ -47,6 +47,11 @@ export default async function ContactDetailPage({
               <p className="text-sm text-slate-500">
                 {contact.title || "Bez pozície"} · {contact.company?.name || "Bez firmy"} · {contact.city || "—"}
               </p>
+              {contact.websiteUrl ? (
+                <a href={contact.websiteUrl} className="mt-1 inline-block text-sm text-primary" target="_blank" rel="noreferrer">
+                  {contact.websiteUrl}
+                </a>
+              ) : null}
             </div>
             <form action={placeCallAction}>
               <input type="hidden" name="contactId" value={contact.id} />

@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { PauseCircle, PlayCircle, CalendarClock } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { campaignStatusLabel, contactStatusLabel, formatDateTime, formatMoney } from "@/lib/utils";
-import { pauseCampaignAction, resumeCampaignAction, startCampaignAction } from "@/lib/actions";
+import { campaignStatusLabel, contactStatusLabel, formatDateTime, formatMoney, harvestStatusLabel } from "@/lib/utils";
+import { pauseCampaignAction, resumeCampaignAction, startCampaignAction, startHarvestAction } from "@/lib/actions";
 
 export default async function DashboardPage() {
-  const [contacts, callsToday, openTasks, running, deals, due, recentCalls, campaigns] =
+  const [contacts, callsToday, openTasks, running, deals, due, recentCalls, campaigns, harvest] =
     await Promise.all([
       prisma.contact.count(),
       prisma.call.count({
@@ -28,6 +28,7 @@ export default async function DashboardPage() {
         include: { contact: true },
       }),
       prisma.campaign.findMany({ orderBy: { updatedAt: "desc" }, take: 4 }),
+      prisma.harvestJob.findUnique({ where: { id: "default" } }),
     ]);
 
   const connected = await prisma.call.count({
@@ -109,22 +110,49 @@ export default async function DashboardPage() {
         </div>
 
         <div className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-sm)]">
-          <h2 className="mb-4 flex items-center gap-2 font-semibold">
-            <CalendarClock className="h-4 w-4 text-primary" />
-            Najbližšie termíny
-          </h2>
-          <ul className="space-y-3">
-            {due.map((contact) => (
-              <li key={contact.id} className="flex items-center justify-between gap-3 text-sm">
-                <Link href={`/kontakty/${contact.id}`} className="font-medium hover:text-primary">
-                  {contact.firstName} {contact.lastName}
-                </Link>
-                <span className="number-mono text-slate-500">{formatDateTime(contact.nextFollowUpAt)}</span>
-              </li>
-            ))}
-            {due.length === 0 ? <li className="text-sm text-slate-500">Žiadne naplánované follow-upy.</li> : null}
-          </ul>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-semibold">Zber čísiel</h2>
+            <Link href="/zber" className="text-sm text-primary">
+              Pravidlá zberu
+            </Link>
+          </div>
+          {harvest && harvest.status === "RUNNING" ? (
+            <div className="rounded-xl bg-muted p-4">
+              <p className="number-mono text-xs text-slate-500">{harvestStatusLabel[harvest.status]}</p>
+              <p className="mt-1 text-lg font-semibold">{harvest.added} nových čísiel</p>
+              <p className="text-sm text-slate-500">
+                {harvest.skippedSlow} pomalých webov mimo · {harvest.duplicates} duplicít
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">
+              Hľadá zastaralé .sk weby, preskakuje pomalé a neukladá to isté číslo dvakrát.
+              <form action={startHarvestAction} className="mt-3">
+                <button className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-semibold text-white">
+                  <PlayCircle className="h-4 w-4" /> Spustiť zber
+                </button>
+              </form>
+            </div>
+          )}
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-sm)]">
+        <h2 className="mb-4 flex items-center gap-2 font-semibold">
+          <CalendarClock className="h-4 w-4 text-primary" />
+          Najbližšie termíny
+        </h2>
+        <ul className="space-y-3">
+          {due.map((contact) => (
+            <li key={contact.id} className="flex items-center justify-between gap-3 text-sm">
+              <Link href={`/kontakty/${contact.id}`} className="font-medium hover:text-primary">
+                {contact.firstName} {contact.lastName}
+              </Link>
+              <span className="number-mono text-slate-500">{formatDateTime(contact.nextFollowUpAt)}</span>
+            </li>
+          ))}
+          {due.length === 0 ? <li className="text-sm text-slate-500">Žiadne naplánované follow-upy.</li> : null}
+        </ul>
       </section>
 
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-sm)]">

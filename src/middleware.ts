@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC = ["/login", "/api/cron", "/api/dialer", "/api/twilio"];
+const PUBLIC = ["/login", "/api/cron", "/api/dialer", "/api/harvest", "/api/twilio"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

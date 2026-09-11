@@ -10,6 +10,7 @@ Aplikácia beží na **Vercel** na adrese [https://callbot-crm.vercel.app](https
 - karty kontaktov: poznámky, follow-up dátumy, stav, DNC
 - pipeline dealov
 - kampane so **spusti / pozastav / zastav**
+- zber čísiel zo **zastaraných / škaredých .sk webov** (bez AI, pomalé weby von, čísla bez duplicít)
 - automatický dialer (simulačný adaptér, neskôr Twilio + ChatGPT Realtime)
 - import CSV
 - cron + reťazenie hovorov bez zásahu človeka

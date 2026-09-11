@@ -6,14 +6,17 @@ import { z } from "zod";
 import { ContactStatus, DealStage, VoiceProviderKind } from "@prisma/client";
 import { prisma } from "./prisma";
 import { clearSession, loginWithPassword, requireSession } from "./auth";
-import { formatPhone } from "./utils";
+import { normalizeSkPhone } from "./phone";
 import { getVoiceProvider } from "./voice";
 import { pauseCampaign, resumeCampaign, startCampaign, stopCampaign } from "./dialer";
+import { pauseHarvest, resumeHarvest, startHarvest, stopHarvest, ensureHarvestJob } from "./harvest";
+import { DEFAULT_QUERIES } from "./discover";
 
 const phoneSchema = z
   .string()
   .min(8, "Telefónne číslo je príliš krátke")
-  .transform((value) => formatPhone(value));
+  .transform((value) => normalizeSkPhone(value) ?? "")
+  .refine((value) => value.length > 0, "Zadaj slovenské číslo, napr. 0901 123 456");
 
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
@@ -101,7 +104,7 @@ export async function updateContactAction(formData: FormData) {
     data: {
       firstName: String(formData.get("firstName") || ""),
       lastName: String(formData.get("lastName") || ""),
-      phone: formatPhone(String(formData.get("phone") || "")),
+      phone: normalizeSkPhone(String(formData.get("phone") || "")) ?? String(formData.get("phone") || ""),
       email: String(formData.get("email") || "") || null,
       city: String(formData.get("city") || "") || null,
       title: String(formData.get("title") || "") || null,
@@ -377,7 +380,7 @@ export async function importContactsAction(formData: FormData) {
 
   for (const row of rows) {
     const cols = row.split(/[,;]/).map((c) => c.trim().replace(/^"|"$/g, ""));
-    const phone = formatPhone(cols.find((c) => /^\+?\d{8,}$/.test(c.replace(/\s/g, ""))) || cols[2] || cols[0] || "");
+    const phone = normalizeSkPhone(cols.find((c) => /\d{8,}/.test(c)) || cols[2] || cols[0] || "");
     if (!phone) continue;
     const firstName = cols[0] && !/^\+?\d/.test(cols[0]) ? cols[0] : "Kontakt";
     const lastName = cols[1] && !/^\+?\d/.test(cols[1]) ? cols[1] : phone.slice(-4);
@@ -433,4 +436,53 @@ export async function saveSettingsAction(formData: FormData) {
     },
   });
   revalidatePath("/nastavenia");
+}
+
+export async function startHarvestAction() {
+  await requireSession();
+  await startHarvest();
+  revalidatePath("/zber");
+  revalidatePath("/");
+}
+
+export async function pauseHarvestAction() {
+  await requireSession();
+  await pauseHarvest();
+  revalidatePath("/zber");
+  revalidatePath("/");
+}
+
+export async function resumeHarvestAction() {
+  await requireSession();
+  await resumeHarvest();
+  revalidatePath("/zber");
+  revalidatePath("/");
+}
+
+export async function stopHarvestAction() {
+  await requireSession();
+  await stopHarvest();
+  revalidatePath("/zber");
+  revalidatePath("/");
+}
+
+export async function saveHarvestSettingsAction(formData: FormData) {
+  await requireSession();
+  await ensureHarvestJob();
+  const queries = String(formData.get("queries") || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  await prisma.harvestJob.update({
+    where: { id: "default" },
+    data: {
+      maxLoadMs: Math.max(800, Number(formData.get("maxLoadMs") || 2000)),
+      minScore: Math.max(10, Number(formData.get("minScore") || 36)),
+      delayMs: Math.max(1500, Number(formData.get("delayMs") || 3500)),
+      targetNewContacts: Math.max(1, Number(formData.get("targetNewContacts") || 400)),
+      attachToCampaign: formData.get("attachToCampaign") === "on",
+      queries: queries.length ? queries : DEFAULT_QUERIES,
+    },
+  });
+  revalidatePath("/zber");
 }

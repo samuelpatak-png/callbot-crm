@@ -9,6 +9,7 @@ import {
   Megaphone,
   PhoneCall,
   ListTodo,
+  Radar,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const NAV = [
   { href: "/kontakty", label: "Čísla", icon: Phone },
   { href: "/pipeline", label: "Pipeline", icon: GitBranch },
   { href: "/kampane", label: "Kampane", icon: Megaphone },
+  { href: "/zber", label: "Zber čísiel", icon: Radar },
   { href: "/hovory", label: "Hovory", icon: PhoneCall },
   { href: "/ulohy", label: "Úlohy", icon: ListTodo },
   { href: "/nastavenia", label: "Nastavenia", icon: Settings },

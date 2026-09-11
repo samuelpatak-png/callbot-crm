@@ -84,6 +84,24 @@ enum VoiceProviderKind {
   TWILIO
 }
 
+enum HarvestStatus {
+  IDLE
+  RUNNING
+  PAUSED
+  STOPPED
+  COMPLETED
+}
+
+enum HarvestSiteStatus {
+  QUEUED
+  ADDED
+  SKIPPED_SLOW
+  SKIPPED_MODERN
+  SKIPPED_NO_PHONE
+  DUPLICATE
+  FAILED
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -131,6 +149,7 @@ model Contact {
   lastCalledAt   DateTime?
   companyId      String?
   ownerId        String?
+  websiteUrl     String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -149,6 +168,7 @@ model Contact {
   @@index([companyId])
   @@index([ownerId])
   @@index([lastCalledAt])
+  @@index([websiteUrl])
 }
 
 model Tag {
@@ -321,4 +341,56 @@ model AppSettings {
   companyName         String            @default("CallBot")
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
+}
+
+model HarvestJob {
+  id                 String         @id @default("default")
+  status             HarvestStatus  @default(IDLE)
+  queries            String[]
+  queryIndex         Int            @default(0)
+  maxLoadMs          Int            @default(2000)
+  minScore           Int            @default(36)
+  delayMs            Int            @default(3500)
+  targetNewContacts  Int            @default(400)
+  attachToCampaign   Boolean        @default(true)
+  scanned            Int            @default(0)
+  skippedSlow        Int            @default(0)
+  skippedModern      Int            @default(0)
+  skippedNoPhone     Int            @default(0)
+  duplicates         Int            @default(0)
+  added              Int            @default(0)
+  failed             Int            @default(0)
+  lastError          String?
+  startedAt          DateTime?
+  pausedAt           DateTime?
+  stoppedAt          DateTime?
+  lastRunAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  sites              HarvestedSite[]
+
+  @@index([status])
+}
+
+model HarvestedSite {
+  id            String             @id @default(cuid())
+  jobId         String
+  url           String
+  canonicalUrl  String             @unique
+  domain        String
+  title         String?
+  loadMs        Int?
+  score         Int?
+  reasons       String[]
+  phones        String[]
+  status        HarvestSiteStatus  @default(QUEUED)
+  contactId     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  job HarvestJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, status])
+  @@index([domain])
+  @@index([createdAt])
 }

@@ -3,6 +3,7 @@ import type { CallStatus, ContactStatus } from "@prisma/client";
 import { prisma } from "./prisma";
 import { appUrl } from "./utils";
 import { getVoiceProvider } from "./voice";
+import { cronSecret } from "./cron-auth";
 
 function inWorkingHours(start: string, end: string, timeZone: string) {
   const now = new Date();
@@ -29,7 +30,7 @@ function contactStatusFromOutcome(outcome: string, callStatus: CallStatus): Cont
 }
 
 async function scheduleNextTick(delayMs: number) {
-  const secret = process.env.CRON_SECRET;
+  const secret = cronSecret();
   if (!secret) return;
   after(async () => {
     await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, 8000)));
