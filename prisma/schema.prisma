@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContactStatus {
+  NEW
+  QUEUED
+  CALLING
+  NO_ANSWER
+  VOICEMAIL
+  CONNECTED
+  CALLBACK
+  INTERESTED
+  NOT_INTERESTED
+  CONVERTED
+  DNC
+  FAILED
+}
+
+enum CampaignStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  STOPPED
+  COMPLETED
+}
+
+enum CampaignMemberStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum CallDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum CallStatus {
+  QUEUED
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  NO_ANSWER
+  BUSY
+  FAILED
+  VOICEMAIL
+  CANCELED
+}
+
+enum DealStage {
+  LEAD
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+  CANCELED
+}
+
+enum ActivityType {
+  CALL
+  NOTE
+  TASK
+  STATUS_CHANGE
+  CAMPAIGN
+  SYSTEM
+}
+
+enum VoiceProviderKind {
+  STUB
+  TWILIO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedContacts Contact[] @relation("ContactOwner")
+  notes         Note[]
+  tasks         Task[]
+  calls         Call[]    @relation("CallAgent")
+  activities    Activity[]
+
+  @@index([email])
+}
+
+model Company {
+  id        String    @id @default(cuid())
+  name      String
+  website   String?
+  industry  String?
+  phone     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  contacts  Contact[]
+  deals     Deal[]
+
+  @@index([name])
+}
+
+model Contact {
+  id             String        @id @default(cuid())
+  firstName      String
+  lastName       String
+  phone          String        @unique
+  email          String?
+  title          String?
+  city           String?
+  status         ContactStatus @default(NEW)
+  source         String?
+  timezone       String        @default("Europe/Bratislava")
+  doNotCall      Boolean       @default(false)
+  nextFollowUpAt DateTime?
+  lastCalledAt   DateTime?
+  companyId      String?
+  ownerId        String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  company  Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  owner    User?     @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  notes    Note[]
+  tasks    Task[]
+  calls    Call[]
+  deals    Deal[]
+  tags     ContactTag[]
+  members  CampaignMember[]
+  activities Activity[]
+
+  @@index([status])
+  @@index([nextFollowUpAt])
+  @@index([companyId])
+  @@index([ownerId])
+  @@index([lastCalledAt])
+}
+
+model Tag {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  color    String       @default("#2563EB")
+  contacts ContactTag[]
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([tagId])
+}
+
+model Deal {
+  id              String    @id @default(cuid())
+  title           String
+  value           Decimal   @default(0) @db.Decimal(12, 2)
+  stage           DealStage @default(LEAD)
+  expectedCloseAt DateTime?
+  contactId       String?
+  companyId       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([stage])
+  @@index([contactId])
+  @@index([companyId])
+}
+
+model Campaign {
+  id                   String         @id @default(cuid())
+  name                 String
+  description          String?
+  status               CampaignStatus @default(DRAFT)
+  scriptPrompt         String         @default("Si predajný hlasový asistent CallBot. Buď stručný, zdvorilý a zisti záujem.")
+  maxConcurrent        Int            @default(1)
+  delayBetweenCallsMs  Int            @default(4000)
+  retryAttempts        Int            @default(2)
+  workingHoursStart    String         @default("09:00")
+  workingHoursEnd      String         @default("17:00")
+  timezone             String         @default("Europe/Bratislava")
+  startedAt            DateTime?
+  pausedAt             DateTime?
+  stoppedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  members CampaignMember[]
+  calls   Call[]
+
+  @@index([status])
+}
+
+model CampaignMember {
+  id            String               @id @default(cuid())
+  campaignId    String
+  contactId     String
+  queuePosition Int
+  status        CampaignMemberStatus @default(PENDING)
+  attempts      Int                  @default(0)
+  lastAttemptAt DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status, queuePosition])
+  @@index([contactId])
+}
+
+model Call {
+  id              String        @id @default(cuid())
+  contactId       String
+  campaignId      String?
+  agentId         String?
+  direction       CallDirection @default(OUTBOUND)
+  status          CallStatus    @default(QUEUED)
+  outcome         String?
+  durationSec     Int           @default(0)
+  startedAt       DateTime      @default(now())
+  endedAt         DateTime?
+  provider        VoiceProviderKind @default(STUB)
+  providerCallSid String?
+  transcript      String?
+  recordingUrl    String?
+  summary         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  agent    User?     @relation("CallAgent", fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([contactId, startedAt])
+  @@index([campaignId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  contactId String
+  authorId  String?
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([contactId, createdAt])
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  dueAt       DateTime?
+  status      TaskStatus @default(OPEN)
+  completedAt DateTime?
+  contactId   String?
+  ownerId     String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  owner   User?    @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([dueAt, status])
+  @@index([contactId])
+  @@index([ownerId])
+}
+
+model Activity {
+  id        String       @id @default(cuid())
+  type      ActivityType
+  message   String
+  payload   Json?
+  contactId String?
+  userId    String?
+  createdAt DateTime     @default(now())
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([contactId, createdAt])
+  @@index([createdAt])
+}
+
+model AppSettings {
+  id                  String            @id @default("default")
+  voiceProvider       VoiceProviderKind @default(STUB)
+  twilioAccountSid    String?
+  twilioAuthToken     String?
+  twilioFromNumber    String?
+  openaiApiKey        String?
+  openaiRealtimeModel String            @default("gpt-4o-realtime-preview")
+  companyName         String            @default("CallBot")
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+}

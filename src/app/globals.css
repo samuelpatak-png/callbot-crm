@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --primary: #2563eb;
+  --on-primary: #ffffff;
+  --secondary: #3b82f6;
+  --accent: #059669;
+  --muted: #f1f5fd;
+  --card: #ffffff;
+  --border: #e4ecfc;
+  --destructive: #dc2626;
+  --ring: #2563eb;
+  --ink-soft: #475569;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px rgba(37, 99, 235, 0.08);
+  --shadow-lg: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-card: var(--card);
+  --font-sans: var(--font-fira-sans);
+  --font-mono: var(--font-fira-code);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-fira-sans), "Fira Sans", sans-serif;
+}
+
+button,
+[role="button"],
+a,
+input[type="submit"],
+label[for] {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.rail-run {
+  background: linear-gradient(180deg, #059669, #34d399, #059669);
+  background-size: 100% 200%;
+  animation: rail 2.4s linear infinite;
+}
+
+.rail-pause {
+  background: #f59e0b;
+}
+
+.rail-stop {
+  background: #94a3b8;
+}
+
+@keyframes rail {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 200%;
+  }
+}
+
+.number-mono {
+  font-family: var(--font-fira-code), "Fira Code", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
