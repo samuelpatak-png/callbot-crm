@@ -69,7 +69,7 @@ export default async function ContactDetailPage({
           </span>
         </div>
 
-        <form action={updateContactAction} className="grid gap-3 rounded-2xl border border-border bg-white p-5">
+        <form action={updateContactAction} key={contact.updatedAt.toISOString()} className="grid gap-3 rounded-2xl border border-border bg-white p-5">
           <input type="hidden" name="id" value={contact.id} />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium">
