@@ -94,6 +94,7 @@ enum HarvestStatus {
 
 enum HarvestSiteStatus {
   QUEUED
+  SCANNING
   ADDED
   SKIPPED_SLOW
   SKIPPED_MODERN
@@ -349,7 +350,7 @@ model HarvestJob {
   queries            String[]
   queryIndex         Int            @default(0)
   maxLoadMs          Int            @default(2000)
-  minScore           Int            @default(36)
+  minScore           Int            @default(10)
   delayMs            Int            @default(3500)
   targetNewContacts  Int            @default(400)
   attachToCampaign   Boolean        @default(true)

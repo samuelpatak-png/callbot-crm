@@ -121,9 +121,10 @@ export const harvestStatusLabel: Record<HarvestStatus, string> = {
 
 export const harvestSiteStatusLabel: Record<HarvestSiteStatus, string> = {
   QUEUED: "V poradí",
+  SCANNING: "Prehliada sa",
   ADDED: "Pridané číslo",
   SKIPPED_SLOW: "Pomalý web",
-  SKIPPED_MODERN: "Príliš moderný",
+  SKIPPED_MODERN: "Nesplnil pravidlá",
   SKIPPED_NO_PHONE: "Bez telefónu",
   DUPLICATE: "Duplicitné číslo",
   FAILED: "Zlyhalo",

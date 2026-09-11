@@ -30,7 +30,7 @@ export function scoreOutdatedSite(html: string, finalUrl: string): SiteScore {
 
   add(14, "chýba viewport / nie je responzívna", !/name=["']viewport["']/i.test(html));
   add(12, "starý doctype (HTML 4 / XHTML)", /<!doctype html public/i.test(html) || /html 4\.0/i.test(html));
-  add(10, "bez HTTPS", finalUrl.startsWith("http://"));
+  add(14, "bez HTTPS", finalUrl.startsWith("http://"));
   add(12, "FrontPage / Dreamweaver pozostatky", /webbot bot|_vti_|dreamweaver/i.test(html));
   add(10, "značky <font>, <center>, <marquee>", /<(font|center|marquee|blink)\b/i.test(html));
   add(8, "tabuľkový layout", (html.match(/<table\b/gi) ?? []).length >= 6);

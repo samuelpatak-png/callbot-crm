@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "HarvestSiteStatus" ADD VALUE IF NOT EXISTS 'SCANNING';

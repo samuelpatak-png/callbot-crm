@@ -20,9 +20,12 @@ function companyNameFrom(title: string | null, domain: string) {
 async function scheduleNextTick(delayMs: number) {
   const secret = cronSecret();
   if (!secret) return;
+  const url = `${appUrl()}/api/harvest/tick`;
   after(async () => {
-    await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, 8000)));
-    await fetch(`${appUrl()}/api/harvest/tick`, {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(delayMs, 4000)));
+    }
+    void fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret}`,
@@ -30,7 +33,22 @@ async function scheduleNextTick(delayMs: number) {
       },
       body: JSON.stringify({ source: "chain" }),
     }).catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 400));
   });
+}
+
+async function claimQueuedSite(jobId: string) {
+  const site = await prisma.harvestedSite.findFirst({
+    where: { jobId, status: "QUEUED" },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!site) return null;
+  const claimed = await prisma.harvestedSite.updateMany({
+    where: { id: site.id, status: "QUEUED" },
+    data: { status: "SCANNING" },
+  });
+  if (claimed.count === 0) return null;
+  return site;
 }
 
 export async function ensureHarvestJob() {
@@ -44,6 +62,7 @@ export async function ensureHarvestJob() {
       sources?: string[];
       queryIndex?: number;
       lastError?: string | null;
+      minScore?: number;
     } = {};
     if (usesLegacySearchQueries(existing.queries) || bundledCatalog) {
       patch.queries = [];
@@ -52,6 +71,9 @@ export async function ensureHarvestJob() {
     }
     if (!existing.sources.length) {
       patch.sources = ["zoznam", "azet"];
+    }
+    if (existing.minScore >= 36 && existing.added === 0) {
+      patch.minScore = 10;
     }
     if (Object.keys(patch).length) {
       return prisma.harvestJob.update({ where: { id: "default" }, data: patch });
@@ -63,6 +85,7 @@ export async function ensureHarvestJob() {
       id: "default",
       queries: [],
       sources: ["zoznam", "azet"],
+      minScore: 10,
     },
   });
 }
@@ -248,7 +271,7 @@ async function processSite(job: Awaited<ReturnType<typeof ensureHarvestJob>>, si
 
   const title = titleOf(html);
   const judged = scoreOutdatedSite(html, finalUrl);
-  if (judged.modern || judged.score < job.minScore) {
+  if (judged.modern) {
     await prisma.harvestedSite.update({
       where: { id: site.id },
       data: {
@@ -257,6 +280,25 @@ async function processSite(job: Awaited<ReturnType<typeof ensureHarvestJob>>, si
         title,
         score: judged.score,
         reasons: judged.reasons,
+        phones,
+      },
+    });
+    await prisma.harvestJob.update({
+      where: { id: job.id },
+      data: { scanned: { increment: 1 }, skippedModern: { increment: 1 }, lastRunAt: new Date() },
+    });
+    return { processed: 1, added: 0 };
+  }
+
+  if (judged.score < job.minScore) {
+    await prisma.harvestedSite.update({
+      where: { id: site.id },
+      data: {
+        status: "SKIPPED_MODERN",
+        loadMs,
+        title,
+        score: judged.score,
+        reasons: [...judged.reasons, `skóre ${judged.score} je pod minimum ${job.minScore}`],
         phones,
       },
     });
@@ -339,7 +381,7 @@ function titleOf(html: string) {
   return match ? match[1].replace(/\s+/g, " ").trim().slice(0, 180) : null;
 }
 
-export async function tickHarvest() {
+export async function tickHarvest(opts?: { chain?: boolean }) {
   const job = await ensureHarvestJob();
   if (job.status !== "RUNNING") {
     return { ok: true, processed: 0, reason: "not_running" };
@@ -352,10 +394,7 @@ export async function tickHarvest() {
     return { ok: true, processed: 0, reason: "target_reached", added: job.added };
   }
 
-  let queued = await prisma.harvestedSite.findFirst({
-    where: { jobId: job.id, status: "QUEUED" },
-    orderBy: { createdAt: "asc" },
-  });
+  let queued = await claimQueuedSite(job.id);
 
   if (!queued) {
     const queries = queryPool(job.sources, job.queries);
@@ -378,12 +417,9 @@ export async function tickHarvest() {
           : "Katalóg nenašiel nové weby v tomto kole. Ďalší tick skúsi ďalšie kategórie.",
       },
     });
-    queued = await prisma.harvestedSite.findFirst({
-      where: { jobId: job.id, status: "QUEUED" },
-      orderBy: { createdAt: "asc" },
-    });
+    queued = await claimQueuedSite(job.id);
     if (!queued) {
-      await scheduleNextTick(Math.max(job.delayMs, 5000));
+      if (opts?.chain !== false) await scheduleNextTick(Math.max(job.delayMs, 4000));
       return { ok: true, processed: 0, reason: "search_empty" };
     }
   }
@@ -391,7 +427,7 @@ export async function tickHarvest() {
   const result = await processSite(job, queued);
   const fresh = await prisma.harvestJob.findUniqueOrThrow({ where: { id: job.id } });
   if (fresh.status === "RUNNING" && fresh.added < fresh.targetNewContacts) {
-    await scheduleNextTick(job.delayMs);
+    if (opts?.chain !== false) await scheduleNextTick(job.delayMs);
   } else if (fresh.added >= fresh.targetNewContacts) {
     await prisma.harvestJob.update({
       where: { id: job.id },
@@ -401,12 +437,39 @@ export async function tickHarvest() {
   return { ok: true, ...result };
 }
 
-export async function startHarvest() {
-  const job = await prisma.harvestJob.update({
-    where: { id: (await ensureHarvestJob()).id },
+async function prepareRunningJob() {
+  const job = await ensureHarvestJob();
+  await prisma.harvestedSite.updateMany({
+    where: { jobId: job.id, status: "SCANNING" },
+    data: { status: "QUEUED" },
+  });
+  const requeued = await prisma.harvestedSite.updateMany({
+    where: {
+      jobId: job.id,
+      status: "SKIPPED_MODERN",
+      score: { gte: job.minScore },
+      NOT: { reasons: { has: "vyzerá ako moderný framework — preskočiť" } },
+    },
+    data: { status: "QUEUED" },
+  });
+  if (requeued.count > 0) {
+    await prisma.harvestJob.update({
+      where: { id: job.id },
+      data: {
+        skippedModern: { decrement: Math.min(job.skippedModern, requeued.count) },
+        scanned: { decrement: Math.min(job.scanned, requeued.count) },
+      },
+    });
+  }
+  return prisma.harvestJob.update({
+    where: { id: job.id },
     data: { status: "RUNNING", startedAt: new Date(), pausedAt: null, stoppedAt: null, lastError: null },
   });
-  await tickHarvest();
+}
+
+export async function startHarvest() {
+  const job = await prepareRunningJob();
+  await scheduleNextTick(0);
   return job;
 }
 
@@ -418,14 +481,15 @@ export async function pauseHarvest() {
 }
 
 export async function resumeHarvest() {
-  await prisma.harvestJob.update({
-    where: { id: "default" },
-    data: { status: "RUNNING", pausedAt: null },
-  });
-  await tickHarvest();
+  await prepareRunningJob();
+  await scheduleNextTick(0);
 }
 
 export async function stopHarvest() {
+  await prisma.harvestedSite.updateMany({
+    where: { jobId: "default", status: "SCANNING" },
+    data: { status: "QUEUED" },
+  });
   return prisma.harvestJob.update({
     where: { id: "default" },
     data: { status: "STOPPED", stoppedAt: new Date() },

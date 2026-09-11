@@ -480,7 +480,7 @@ export async function saveHarvestSettingsAction(formData: FormData) {
     where: { id: "default" },
     data: {
       maxLoadMs: Math.max(800, Number(formData.get("maxLoadMs") || 2000)),
-      minScore: Math.max(10, Number(formData.get("minScore") || 36)),
+      minScore: Math.max(8, Number(formData.get("minScore") || 10)),
       delayMs: Math.max(1500, Number(formData.get("delayMs") || 3500)),
       targetNewContacts: Math.max(1, Number(formData.get("targetNewContacts") || 400)),
       attachToCampaign: formData.get("attachToCampaign") === "on",

@@ -2,6 +2,7 @@ import { Pause, Play, Square } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { ensureHarvestJob } from "@/lib/harvest";
 import { HARVEST_SOURCES } from "@/lib/discover";
+import { HarvestLive } from "@/components/harvest-live";
 import {
   pauseHarvestAction,
   resumeHarvestAction,
@@ -11,13 +12,19 @@ import {
 } from "@/lib/actions";
 import { formatDateTime, harvestSiteStatusLabel, harvestStatusLabel } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 export default async function HarvestPage() {
   const job = await ensureHarvestJob();
-  const sites = await prisma.harvestedSite.findMany({
-    where: { jobId: job.id },
-    orderBy: { createdAt: "desc" },
-    take: 40,
-  });
+  const [sites, queued] = await Promise.all([
+    prisma.harvestedSite.findMany({
+      where: { jobId: job.id },
+      orderBy: { updatedAt: "desc" },
+      take: 40,
+    }),
+    prisma.harvestedSite.count({ where: { jobId: job.id, status: { in: ["QUEUED", "SCANNING"] } } }),
+  ]);
+  const running = job.status === "RUNNING";
 
   return (
     <div className="space-y-5">
@@ -36,7 +43,11 @@ export default async function HarvestPage() {
         <p className="mt-1 text-sm text-slate-500">
           Spusti, pozastav alebo zastav. Po spustení si weby prechádza sám a dopĺňa čísla do CRM.
         </p>
+        {job.lastRunAt ? (
+          <p className="mt-1 text-xs text-slate-500">Posledný spracovaný web: {formatDateTime(job.lastRunAt)}</p>
+        ) : null}
         {job.lastError ? <p className="mt-2 text-sm text-amber-700">{job.lastError}</p> : null}
+        <HarvestLive running={running} />
         <div className="mt-4 flex flex-wrap gap-2">
           {job.status === "RUNNING" ? (
             <form action={pauseHarvestAction}>
@@ -68,8 +79,8 @@ export default async function HarvestPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Pridané čísla" value={String(job.added)} hint={`cieľ ${job.targetNewContacts}`} />
         <Stat label="Preskenované weby" value={String(job.scanned)} hint={`${job.skippedSlow} pomalých mimo`} />
-        <Stat label="Moderné mimo" value={String(job.skippedModern)} hint="framework, shop, nový dizajn" />
-        <Stat label="Duplicity" value={String(job.duplicates)} hint="číslo už v CRM bolo" />
+        <Stat label="Mimo pravidiel" value={String(job.skippedModern)} hint="moderné alebo nízke skóre" />
+        <Stat label="V poradí" value={String(queued)} hint={`${job.skippedNoPhone} bez telefónu`} />
       </section>
 
       <section className="rounded-2xl border border-border bg-white p-5">
@@ -191,7 +202,7 @@ export default async function HarvestPage() {
                 <td className="number-mono px-4 py-3">{site.loadMs ?? "—"}</td>
                 <td className="number-mono px-4 py-3">{site.phones[0] || "—"}</td>
                 <td className="px-4 py-3">{harvestSiteStatusLabel[site.status]}</td>
-                <td className="px-4 py-3 text-slate-500">{formatDateTime(site.createdAt)}</td>
+                <td className="px-4 py-3 text-slate-500">{formatDateTime(site.updatedAt)}</td>
               </tr>
             ))}
           </tbody>
