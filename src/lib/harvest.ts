@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { prisma } from "./prisma";
 import { appUrl } from "./utils";
 import { cronSecret } from "./cron-auth";
-import { DEFAULT_QUERIES, discoverUrls } from "./discover";
+import { DEFAULT_QUERIES, discoverUrls, usesLegacySearchQueries } from "./discover";
 import { extractSkPhones } from "./phone";
 import { contactPathCandidates, scoreOutdatedSite } from "./site-score";
 import { canonicalizeUrl, fetchHtml, hostOf } from "./web-fetch";
@@ -36,10 +36,10 @@ async function scheduleNextTick(delayMs: number) {
 export async function ensureHarvestJob() {
   const existing = await prisma.harvestJob.findUnique({ where: { id: "default" } });
   if (existing) {
-    if (!existing.queries.length) {
+    if (usesLegacySearchQueries(existing.queries)) {
       return prisma.harvestJob.update({
         where: { id: "default" },
-        data: { queries: DEFAULT_QUERIES },
+        data: { queries: DEFAULT_QUERIES, queryIndex: 0, lastError: null },
       });
     }
     return existing;
@@ -344,15 +344,23 @@ export async function tickHarvest() {
 
   if (!queued) {
     const queries = job.queries.length ? job.queries : DEFAULT_QUERIES;
-    const query = queries[job.queryIndex % queries.length];
-    const urls = await discoverUrls(query);
-    const enqueued = await enqueueUrls(job.id, urls);
+    let enqueued = 0;
+    let used = 0;
+    for (let i = 0; i < Math.min(5, queries.length); i += 1) {
+      const query = queries[(job.queryIndex + i) % queries.length];
+      const urls = await discoverUrls(query);
+      used += 1;
+      enqueued += await enqueueUrls(job.id, urls);
+      if (enqueued) break;
+    }
     await prisma.harvestJob.update({
       where: { id: job.id },
       data: {
-        queryIndex: (job.queryIndex + 1) % queries.length,
+        queryIndex: (job.queryIndex + used) % queries.length,
         lastRunAt: new Date(),
-        lastError: enqueued ? null : `Vyhľadávanie „${query}“ nenašlo nové weby`,
+        lastError: enqueued
+          ? null
+          : "Katalóg nenašiel nové weby v tomto kole. Ďalší tick skúsi ďalšie kategórie.",
       },
     });
     queued = await prisma.harvestedSite.findFirst({
@@ -360,8 +368,8 @@ export async function tickHarvest() {
       orderBy: { createdAt: "asc" },
     });
     if (!queued) {
-      await scheduleNextTick(Math.max(job.delayMs, 8000));
-      return { ok: true, processed: 0, reason: "search_empty", query };
+      await scheduleNextTick(Math.max(job.delayMs, 5000));
+      return { ok: true, processed: 0, reason: "search_empty" };
     }
   }
 

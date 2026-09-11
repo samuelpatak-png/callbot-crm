@@ -24,9 +24,9 @@ export default async function HarvestPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Zber čísiel</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-500">
-          Beží bez AI. Systém hľadá slovenské weby, zmeria rýchlosť a podľa pevných pravidiel nechá
-          len zastaralé, škaredé alebo inak zlé stránky. Pomalé weby ide mimo. Telefón sa uloží len
-          raz, v tvare +421…
+          Beží bez AI. Berie firmy z katalógu Zoznam.sk, zmeria rýchlosť ich vlastného webu a podľa
+          pevných pravidiel nechá len zastaralé, škaredé alebo inak zlé stránky. Pomalé weby idú
+          mimo. Telefón sa uloží len raz, v tvare +421…
         </p>
       </div>
 
@@ -129,7 +129,7 @@ export default async function HarvestPage() {
           Pridávať čísla do kampane na volanie
         </label>
         <label className="text-sm">
-          Dopyty na vyhľadávanie (jeden riadok = jeden dopyt, bez AI)
+          Dopyty / kategórie (jedna URL katalógu Zoznam.sk na riadok)
           <textarea
             name="queries"
             rows={6}
