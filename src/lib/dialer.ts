@@ -4,6 +4,8 @@ import { prisma } from "./prisma";
 import { appUrl } from "./utils";
 import { getVoiceProvider } from "./voice";
 import { cronSecret } from "./cron-auth";
+import { buildCallBriefing } from "./agent-briefing";
+import { loadPlaybookIntoRealtime } from "./openai-agent";
 
 function inWorkingHours(start: string, end: string, timeZone: string) {
   const now = new Date();
@@ -101,12 +103,28 @@ export async function tickDialer() {
   ]);
 
   const provider = getVoiceProvider(settings.voiceProvider);
+  const briefing = await buildCallBriefing({ contact: member.contact, campaign });
+  const realtime = await loadPlaybookIntoRealtime(briefing.settings, briefing.instructions);
+
+  const call = await prisma.call.create({
+    data: {
+      contactId: member.contactId,
+      campaignId: campaign.id,
+      direction: "OUTBOUND",
+      status: "RINGING",
+      agentInstructions: briefing.instructions,
+      realtimeSessionId: realtime.sessionId,
+    },
+  });
+
   const result = await provider.placeCall({
     to: member.contact.phone,
     from: settings.twilioFromNumber,
     contactId: member.contactId,
     campaignId: campaign.id,
+    callId: call.id,
     scriptPrompt: campaign.scriptPrompt,
+    instructions: briefing.instructions,
     twilioAccountSid: settings.twilioAccountSid,
     twilioAuthToken: settings.twilioAuthToken,
   });
@@ -115,11 +133,9 @@ export async function tickDialer() {
   const retry = member.attempts + 1 < campaign.retryAttempts && ["NO_ANSWER", "BUSY", "FAILED"].includes(result.status);
 
   await prisma.$transaction([
-    prisma.call.create({
+    prisma.call.update({
+      where: { id: call.id },
       data: {
-        contactId: member.contactId,
-        campaignId: campaign.id,
-        direction: "OUTBOUND",
         status: result.status,
         outcome: result.outcome,
         durationSec: result.durationSec,
@@ -127,7 +143,9 @@ export async function tickDialer() {
         provider: result.provider,
         providerCallSid: result.providerCallSid,
         transcript: result.transcript,
-        summary: result.summary,
+        summary: realtime.loaded
+          ? `${result.summary} ChatGPT Realtime má načítaný skript.`
+          : result.summary,
       },
     }),
     prisma.contact.update({

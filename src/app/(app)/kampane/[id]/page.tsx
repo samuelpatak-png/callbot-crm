@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { Pause, Play, Square } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import {
@@ -37,6 +38,14 @@ export default async function CampaignDetailPage({
         <p className="number-mono text-xs text-slate-500">{campaignStatusLabel[campaign.status]}</p>
         <h1 className="text-2xl font-semibold">{campaign.name}</h1>
         <p className="mt-1 text-sm text-slate-500">{campaign.description}</p>
+        {campaign.scriptPrompt ? (
+          <p className="mt-2 text-sm text-slate-600">
+            Cieľ pre ChatGPT: {campaign.scriptPrompt}{" "}
+            <Link href="/skript" className="text-primary underline-offset-2 hover:underline">
+              Upraviť firemný skript
+            </Link>
+          </p>
+        ) : null}
         <p className="mt-3 text-sm">
           Fronta: {pending} čaká · {done} dokončených · {campaign.members.length} spolu
         </p>

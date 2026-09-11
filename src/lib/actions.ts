@@ -10,6 +10,8 @@ import { normalizeSkPhone } from "./phone";
 import { getVoiceProvider } from "./voice";
 import { pauseCampaign, resumeCampaign, startCampaign, stopCampaign } from "./dialer";
 import { pauseHarvest, resumeHarvest, startHarvest, stopHarvest, ensureHarvestJob } from "./harvest";
+import { buildCallBriefing, parseObjections } from "./agent-briefing";
+import { loadPlaybookIntoRealtime, rehearseWithChatGpt } from "./openai-agent";
 
 const phoneSchema = z
   .string()
@@ -203,19 +205,32 @@ export async function placeCallAction(formData: FormData) {
     data: { status: "CALLING", lastCalledAt: new Date() },
   });
 
-  const result = await getVoiceProvider(settings.voiceProvider).placeCall({
-    to: contact.phone,
-    from: settings.twilioFromNumber,
-    contactId,
-    twilioAccountSid: settings.twilioAccountSid,
-    twilioAuthToken: settings.twilioAuthToken,
-  });
-
-  await prisma.call.create({
+  const briefing = await buildCallBriefing({ contact });
+  const realtime = await loadPlaybookIntoRealtime(briefing.settings, briefing.instructions);
+  const call = await prisma.call.create({
     data: {
       contactId,
       agentId: session.id,
       direction: "OUTBOUND",
+      status: "RINGING",
+      agentInstructions: briefing.instructions,
+      realtimeSessionId: realtime.sessionId,
+    },
+  });
+
+  const result = await getVoiceProvider(settings.voiceProvider).placeCall({
+    to: contact.phone,
+    from: settings.twilioFromNumber,
+    contactId,
+    callId: call.id,
+    instructions: briefing.instructions,
+    twilioAccountSid: settings.twilioAccountSid,
+    twilioAuthToken: settings.twilioAuthToken,
+  });
+
+  await prisma.call.update({
+    where: { id: call.id },
+    data: {
       status: result.status,
       outcome: result.outcome,
       durationSec: result.durationSec,
@@ -223,7 +238,9 @@ export async function placeCallAction(formData: FormData) {
       provider: result.provider,
       providerCallSid: result.providerCallSid,
       transcript: result.transcript,
-      summary: result.summary,
+      summary: realtime.loaded
+        ? `${result.summary} ChatGPT Realtime má načítaný skript.`
+        : result.summary,
     },
   });
 
@@ -489,4 +506,75 @@ export async function saveHarvestSettingsAction(formData: FormData) {
     },
   });
   revalidatePath("/zber");
+}
+
+export async function savePlaybookAction(formData: FormData) {
+  await requireSession();
+  let objections = parseObjections([]);
+  try {
+    objections = parseObjections(JSON.parse(String(formData.get("objections") || "[]")));
+  } catch {
+    objections = [];
+  }
+  await prisma.callPlaybook.upsert({
+    where: { id: "default" },
+    create: { id: "default" },
+    update: {},
+  });
+  await prisma.callPlaybook.update({
+    where: { id: "default" },
+    data: {
+      agentName: String(formData.get("agentName") || "").trim().slice(0, 120),
+      companyAbout: String(formData.get("companyAbout") || "").trim().slice(0, 4000),
+      offer: String(formData.get("offer") || "").trim().slice(0, 4000),
+      benefits: String(formData.get("benefits") || "").trim().slice(0, 4000),
+      openingLine: String(formData.get("openingLine") || "").trim().slice(0, 800),
+      qualifyingQuestions: String(formData.get("qualifyingQuestions") || "").trim().slice(0, 2000),
+      callToAction: String(formData.get("callToAction") || "").trim().slice(0, 1500),
+      neverDo: String(formData.get("neverDo") || "").trim().slice(0, 2000),
+      tone: String(formData.get("tone") || "").trim().slice(0, 800),
+      objections,
+    },
+  });
+  const companyName = String(formData.get("companyName") || "").trim();
+  if (companyName) {
+    await prisma.appSettings.upsert({
+      where: { id: "default" },
+      update: { companyName: companyName.slice(0, 120) },
+      create: { id: "default", companyName: companyName.slice(0, 120) },
+    });
+  }
+  revalidatePath("/skript");
+}
+
+export type RehearseState = {
+  reply: string;
+  error: string;
+};
+
+export async function rehearsePlaybookAction(
+  _prev: RehearseState,
+  formData: FormData,
+): Promise<RehearseState> {
+  await requireSession();
+  const customerLine = String(formData.get("customerLine") || "").trim();
+  if (!customerLine) {
+    return { reply: "", error: "Napíš, čo zákazník povedal." };
+  }
+  const briefing = await buildCallBriefing({});
+  if (!briefing.playbook.offer && !briefing.playbook.companyAbout && !briefing.playbook.openingLine) {
+    return { reply: "", error: "Najprv ulož skript — firma, ponuka alebo úvod sú prázdne." };
+  }
+  if (!briefing.settings.openaiApiKey) {
+    return { reply: "", error: "V Nastaveniach chýba OpenAI kľúč. Bez neho ChatGPT skript nevie načítať." };
+  }
+  const result = await rehearseWithChatGpt({
+    apiKey: briefing.settings.openaiApiKey,
+    instructions: briefing.instructions,
+    customerLine,
+  });
+  if (!result.ok) {
+    return { reply: "", error: result.error };
+  }
+  return { reply: result.reply, error: "" };
 }

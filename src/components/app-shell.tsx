@@ -10,6 +10,7 @@ import {
   PhoneCall,
   ListTodo,
   Radar,
+  ScrollText,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -21,6 +22,7 @@ const NAV = [
   { href: "/kontakty", label: "Čísla", icon: Phone },
   { href: "/pipeline", label: "Pipeline", icon: GitBranch },
   { href: "/kampane", label: "Kampane", icon: Megaphone },
+  { href: "/skript", label: "Skript", icon: ScrollText },
   { href: "/zber", label: "Zber čísiel", icon: Radar },
   { href: "/hovory", label: "Hovory", icon: PhoneCall },
   { href: "/ulohy", label: "Úlohy", icon: ListTodo },

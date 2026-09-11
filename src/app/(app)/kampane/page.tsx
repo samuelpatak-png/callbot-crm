@@ -15,7 +15,10 @@ export default async function CampaignsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Kampane</h1>
-        <p className="text-sm text-slate-500">Fronta čísel, ktorú vieš spustiť, pozastaviť alebo zastaviť.</p>
+        <p className="text-sm text-slate-500">
+          Fronta čísel, ktorú vieš spustiť, pozastaviť alebo zastaviť. Firemný skript pre ChatGPT sa
+          nastavuje v <Link href="/skript" className="text-primary underline-offset-2 hover:underline">Skripte</Link>.
+        </p>
       </div>
 
       <form action={createCampaignAction} className="grid gap-3 rounded-2xl border border-border bg-white p-5">
@@ -24,7 +27,7 @@ export default async function CampaignsPage() {
         <textarea name="description" placeholder="Popis" className="rounded-lg border border-border p-3" rows={2} />
         <textarea
           name="scriptPrompt"
-          placeholder="Skript pre ChatGPT Live (neskôr)"
+          placeholder="Cieľ tejto kampane — ChatGPT ho pridá k firemnému skriptu (dohodnúť demo, preveriť záujem…)"
           className="rounded-lg border border-border p-3"
           rows={3}
         />

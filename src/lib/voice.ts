@@ -5,7 +5,9 @@ export type PlaceCallInput = {
   from?: string | null;
   contactId: string;
   campaignId?: string | null;
+  callId?: string | null;
   scriptPrompt?: string | null;
+  instructions?: string | null;
   twilioAccountSid?: string | null;
   twilioAuthToken?: string | null;
 };
@@ -95,8 +97,9 @@ export class TwilioVoiceProvider implements VoiceProvider {
     }
 
     const app = process.env.APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
-    const twimlUrl = app
-      ? `${app.startsWith("http") ? app : `https://${app}`}/api/twilio/voice`
+    const origin = app ? (app.startsWith("http") ? app : `https://${app}`) : "";
+    const twimlUrl = origin
+      ? `${origin}/api/twilio/voice${input.callId ? `?callId=${encodeURIComponent(input.callId)}` : ""}`
       : undefined;
 
     const body = new URLSearchParams({

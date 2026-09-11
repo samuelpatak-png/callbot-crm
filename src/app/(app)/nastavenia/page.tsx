@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { saveSettingsAction } from "@/lib/actions";
+import Link from "next/link";
 
 export default async function SettingsPage() {
   const settings = await prisma.appSettings.upsert({
@@ -13,7 +14,11 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Nastavenia</h1>
         <p className="text-sm text-slate-500">
-          Twilio a ChatGPT Live API sú pripravené ako adaptéry. Kým kľúče nie sú vyplnené, dialer používa simuláciu.
+          Twilio a ChatGPT Live API. Skript, predstavenie a argumenty nastavíš v{" "}
+          <Link href="/skript" className="text-primary underline-offset-2 hover:underline">
+            Skripte
+          </Link>
+          . Kým kľúče nie sú vyplnené, dialer používa simuláciu.
         </p>
       </div>
       <form action={saveSettingsAction} className="grid gap-4 rounded-2xl border border-border bg-white p-6">
