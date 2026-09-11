@@ -2,7 +2,7 @@
 
 Outbound CRM pre telefónne čísla, hovory, poznámky, termíny a automatizované kampane.
 
-Aplikácia beží na **Vercel**, databáza na **Neon Postgres**. Nič netreba spúšťať na localhost.
+Aplikácia beží na **Vercel** na adrese [https://callbot-crm.vercel.app](https://callbot-crm.vercel.app). Databáza je **Neon Postgres**. Nič netreba spúšťať na localhost.
 
 ## Čo je hotové
 

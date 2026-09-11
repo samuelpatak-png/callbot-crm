@@ -34,8 +34,11 @@ yarn-error.log*
 .env*
 !.env.example
 
-# vercel
+# agents
+.agents/
+skills-lock.json
 .vercel
+
 
 # typescript
 *.tsbuildinfo
