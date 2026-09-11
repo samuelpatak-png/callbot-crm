@@ -58,7 +58,7 @@ function randInt(min: number, max: number) {
 }
 
 function openingFrom(instructions?: string | null) {
-  const match = instructions?.match(/„([^”]+)“/);
+  const match = instructions?.match(/„([^„“”\n]{8,280})“/);
   return match?.[1]?.trim() || "Dobrý deň, volám z CallBotu. Neruším vás na dve minúty?";
 }
 
