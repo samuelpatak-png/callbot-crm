@@ -17,10 +17,8 @@ export type RuntimeConfig = {
   twilioFromNumber: string | null;
   openaiApiKey: string | null;
   openaiRealtimeModel: string;
-  mailFrom: string | null;
   twilioFromEnv: boolean;
   openaiFromEnv: boolean;
-  resendConfigured: boolean;
 };
 
 export async function getRuntimeConfig(): Promise<RuntimeConfig> {
@@ -39,10 +37,8 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
     twilioFromNumber: firstNonEmpty(process.env.TWILIO_FROM_NUMBER, settings.twilioFromNumber),
     openaiApiKey: firstNonEmpty(process.env.OPENAI_API_KEY, settings.openaiApiKey),
     openaiRealtimeModel: settings.openaiRealtimeModel || "gpt-4o-mini",
-    mailFrom: firstNonEmpty(process.env.MAIL_FROM, settings.mailFrom),
     twilioFromEnv,
     openaiFromEnv,
-    resendConfigured: Boolean(process.env.RESEND_API_KEY?.trim()),
   };
 }
 

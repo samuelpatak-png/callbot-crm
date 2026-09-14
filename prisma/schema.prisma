@@ -95,12 +95,6 @@ enum UserRole {
   AGENT
 }
 
-enum MailStatus {
-  PENDING
-  SENT
-  FAILED
-}
-
 enum HarvestStatus {
   IDLE
   RUNNING
@@ -183,7 +177,6 @@ model Contact {
   tags     ContactTag[]
   members  CampaignMember[]
   activities Activity[]
-  mails    MailMessage[]
 
   @@index([status])
   @@index([nextFollowUpAt])
@@ -305,7 +298,6 @@ model Call {
   contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
   campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   agent    User?     @relation("CallAgent", fields: [agentId], references: [id], onDelete: SetNull)
-  mails    MailMessage[]
 
   @@index([contactId, startedAt])
   @@index([campaignId])
@@ -373,31 +365,8 @@ model AppSettings {
   openaiApiKey        String?
   openaiRealtimeModel String            @default("gpt-4o-mini")
   companyName         String            @default("CallBot")
-  mailFrom            String?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
-}
-
-model MailMessage {
-  id        String     @id @default(cuid())
-  contactId String
-  callId    String?
-  toEmail   String
-  subject   String
-  body      String
-  status    MailStatus @default(PENDING)
-  error     String?
-  provider  String?
-  sentAt    DateTime?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  call    Call?   @relation(fields: [callId], references: [id], onDelete: SetNull)
-
-  @@index([contactId, createdAt])
-  @@index([status])
-  @@index([callId])
 }
 
 model CallPlaybook {

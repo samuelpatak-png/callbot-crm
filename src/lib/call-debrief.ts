@@ -3,7 +3,6 @@ import { prisma } from "./prisma";
 import type { PlaceCallResult } from "./voice";
 import { classifyCallResult, extractEmailFromTranscript, normalizeEmail } from "./call-capture";
 import { getRuntimeConfig } from "./settings";
-import { queueMaterialsEmail } from "./mail";
 
 export type CallDebrief = {
   summary: string;
@@ -58,7 +57,7 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string, t
       ...base,
       summary: capturedEmail
         ? `${name} prejavil záujem a dal e-mail ${capturedEmail}.`
-        : `${name} prejavil záujem. Treba poslať ponuku alebo dohodnúť termín.`,
+        : `${name} prejavil záujem. Treba dohodnúť termín.`,
       contactStatus: "INTERESTED",
       resultKind: "SUCCESS",
       followUpAt: hoursFromNow(24),
@@ -66,8 +65,8 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string, t
         ? `Po hovore: záujem. E-mail z hovoru: ${capturedEmail}. ${result.summary}`
         : `Po hovore: záujem. ${result.summary}`,
       taskTitle: capturedEmail
-        ? `Poslať podklady na ${capturedEmail} — ${name}`
-        : `Dohodnúť termín / poslať ponuku — ${name}`,
+        ? `Ozvať sa na ${capturedEmail} — ${name}`
+        : `Dohodnúť termín — ${name}`,
       taskDueAt: hoursFromNow(24),
     };
   }
@@ -128,7 +127,7 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string, t
   const connected: CallDebrief = {
     ...base,
     summary: capturedEmail
-      ? `Hovor s ${name} prebehol. Má poslať podklady na ${capturedEmail}.`
+      ? `Hovor s ${name} prebehol. E-mail z hovoru: ${capturedEmail}.`
       : `Hovor s ${name} prebehol. Treba dohodnúť ďalší krok.`,
     contactStatus: capturedEmail || result.outcome === "callback" ? "CALLBACK" : "CONNECTED",
     resultKind: "SUCCESS",
@@ -136,7 +135,7 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string, t
     note: capturedEmail
       ? `Po hovore: spojený, e-mail ${capturedEmail}. ${result.summary}`
       : `Po hovore: spojený. ${result.summary}`,
-    taskTitle: capturedEmail ? `Poslať podklady na ${capturedEmail} — ${name}` : `Dohodnúť ďalší krok — ${name}`,
+    taskTitle: capturedEmail ? `Ozvať sa na ${capturedEmail} — ${name}` : `Dohodnúť ďalší krok — ${name}`,
     taskDueAt: hoursFromNow(24),
   };
   return connected;
@@ -194,9 +193,9 @@ export async function analyzeCallTranscript(opts: {
   "taskDueAt": "ISO-8601 alebo null",
   "objections": ["krátke námietky z hovoru"]
 }
-SUCCESS = záujem, termín, spätné volanie, e-mail na podklady, deal sa posunul.
+SUCCESS = záujem, termín, spätné volanie, e-mail z hovoru, deal sa posunul.
 FAILURE = nezdvihol, záznamník, bez záujmu, DNC, zlyhanie, hovor bez ďalšieho kroku.
-Nevymýšľaj e-mail, ceny ani sľuby, ktoré v prepise nie sú. Ak povedal nevolajte, doNotCall=true a contactStatus=DNC.`,
+Nevymýšľaj e-mail, ceny ani sľuby, ktoré v prepise nie sú. E-mail z hovoru len zapíš, nič neodosielaj. Ak povedal nevolajte, doNotCall=true a contactStatus=DNC.`,
           },
           {
             role: "user",
@@ -230,7 +229,7 @@ Nevymýšľaj e-mail, ceny ani sľuby, ktoré v prepise nie sú. Ak povedal nevo
       typeof parsed.taskTitle === "string" && parsed.taskTitle.trim()
         ? parsed.taskTitle.trim().slice(0, 180)
         : capturedEmail && !fallback.taskTitle
-          ? `Poslať podklady na ${capturedEmail}`
+          ? `Ozvať sa na ${capturedEmail}`
           : fallback.taskTitle;
     const resultKindRaw = String(parsed.resultKind || "").toUpperCase();
     const resultKind: CallResultKind =
@@ -433,15 +432,6 @@ export async function applyCallDebrief(opts: {
       }
     }
   });
-
-  if (debrief.resultKind === "SUCCESS" && debrief.capturedEmail) {
-    await queueMaterialsEmail({
-      contactId: opts.contactId,
-      callId: opts.callId,
-      toEmail: debrief.capturedEmail,
-      contactName: opts.contactName,
-    });
-  }
 
   return debrief;
 }

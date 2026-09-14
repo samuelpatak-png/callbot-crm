@@ -55,7 +55,7 @@ export default async function CallsPage({
       orderBy: { startedAt: "desc" },
       skip,
       take: CALL_PAGE_SIZE,
-      include: { contact: true, campaign: true, mails: { orderBy: { createdAt: "desc" }, take: 1 } },
+      include: { contact: true, campaign: true },
     }),
     callHistoryStats(where),
     filtered ? callHistoryStats({}) : Promise.resolve(null),
@@ -209,7 +209,6 @@ export default async function CallsPage({
         ) : null}
         {calls.map((call) => {
           const meta = debriefMeta(call.debrief);
-          const mail = call.mails[0];
           return (
             <article key={call.id} className="rounded-2xl border border-border bg-white p-4 sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -228,11 +227,6 @@ export default async function CallsPage({
                     </p>
                   ) : call.contact.email ? (
                     <p className="mt-1 text-sm text-slate-500">E-mail v karte: {call.contact.email}</p>
-                  ) : null}
-                  {mail ? (
-                    <p className="mt-1 text-xs text-slate-500">
-                      Podklady: {mail.status === "SENT" ? "odoslané" : mail.status === "FAILED" ? "odoslanie zlyhalo" : "čakajú na RESEND_API_KEY"}
-                    </p>
                   ) : null}
                 </div>
                 <div className="text-right text-sm">

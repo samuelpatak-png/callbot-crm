@@ -7,7 +7,6 @@ import { buildCallBriefing } from "./agent-briefing";
 import { applyCallDebrief } from "./call-debrief";
 import { getRuntimeConfig } from "./settings";
 import { requeueDueFollowUps } from "./followup-queue";
-import { flushPendingMail } from "./mail";
 
 function weekdayKey(timeZone: string) {
   const weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(new Date());
@@ -49,7 +48,6 @@ async function scheduleNextTick(delayMs: number) {
 
 export async function tickDialer() {
   await requeueDueFollowUps();
-  await flushPendingMail();
 
   const settings = await getRuntimeConfig();
 

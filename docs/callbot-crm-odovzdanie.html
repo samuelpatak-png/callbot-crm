@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <title>CallBot CRM — odovzdanie na dotiahnutie</title>
+  <style>
+    @page { size: A4; margin: 16mm 16mm 18mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #0f172a;
+      font: 11pt/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    h1 { font-size: 20pt; margin: 0 0 6px; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 12.5pt;
+      margin: 18px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1.5px solid #0f172a;
+    }
+    h3 { font-size: 11pt; margin: 12px 0 6px; }
+    p, li { margin: 0 0 6px; }
+    ul, ol { margin: 0 0 8px; padding-left: 18px; }
+    .meta { color: #475569; font-size: 9.5pt; margin-bottom: 14px; }
+    .box {
+      border: 1px solid #cbd5e1;
+      padding: 10px 12px;
+      margin: 8px 0 12px;
+      page-break-inside: avoid;
+    }
+    .warn { border-color: #b45309; background: #fffbeb; }
+    .ok { border-color: #047857; background: #ecfdf5; }
+    .kicker { font-size: 9pt; letter-spacing: 0.12em; text-transform: uppercase; color: #1d4ed8; font-weight: 700; margin: 0 0 4px; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font-size: 10pt; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; font-weight: 650; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.2pt; }
+    .check { list-style: none; padding-left: 0; }
+    .check li { padding-left: 22px; position: relative; margin-bottom: 5px; }
+    .check li::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 3px;
+      width: 11px; height: 11px;
+      border: 1.4px solid #334155;
+    }
+    .small { font-size: 9.5pt; color: #334155; }
+    footer {
+      margin-top: 16px;
+      padding-top: 8px;
+      border-top: 1px solid #cbd5e1;
+      font-size: 8.5pt;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <p class="kicker">Interné odovzdanie</p>
+  <h1>CallBot CRM — čo treba dotiahnuť, aby to volalo</h1>
+  <p class="meta">
+    14. 9. 2026 · pre kolegu, ktorý má spustiť ostrú linku · aplikácia už beží, chýbajú účty a kľúče
+  </p>
+
+  <div class="box warn">
+    <strong>Stav teraz:</strong> CRM (kontakty, kampane, história, štatistiky, skript) je hotové.
+    Hovory sú zatiaľ <em>simulácia</em>. Kým nie sú Twilio + OpenAI, nikomu sa nezavolá.
+    Predvolené heslo je vo verejnom GitHube — hneď po prihlásení ho zmeň.
+  </div>
+
+  <h2>1. Kde to je</h2>
+  <table>
+    <tr><th>Čo</th><th>Adresa / poznámka</th></tr>
+    <tr><td>Aplikácia</td><td class="mono">https://callbot-crm.vercel.app</td></tr>
+    <tr><td>Prihlásenie</td><td>e-mail <span class="mono">admin@callbot.local</span> · heslo je v Vercel → Environment Variables → <span class="mono">INITIAL_ADMIN_PASSWORD</span> (vyžiadať od vlastníka, do tohto PDF ho nedávame)</td></tr>
+    <tr><td>Kód</td><td class="mono">https://github.com/samuelpatak-png/callbot-crm</td></tr>
+    <tr><td>Hosting</td><td>Vercel, vetva <span class="mono">main</span> (každý push sa nasadí)</td></tr>
+    <tr><td>Databáza</td><td>Neon Postgres (už napojená)</td></tr>
+  </table>
+
+  <h2>2. Čo už CRM vie (netreba stavať)</h2>
+  <ul>
+    <li>Kontakty, kliknutie Volat, kampane spusti / pauza / stop, pipeline, úlohy</li>
+    <li>Skript pre agenta (úvod, ponuka, námietky) — musí sa ale <strong>vyplniť</strong></li>
+    <li>Po hovore: nahrávka, prepis, úspech/neúspech, e-mail z reči, poznámka, úloha, deal</li>
+    <li>História: hľadanie podľa mena, dátumu, času, čísla, e-mailu, kampane, úspešnosti + štatistiky + CSV</li>
+    <li>Follow-up po termíne sa vráti do fronty; zber čísiel z webu (spúšťať len po právnom súhlase v UI)</li>
+  </ul>
+
+  <h2>3. Účty, ktoré treba založiť</h2>
+  <table>
+    <tr><th>Služba</th><th>Načo</th><th>Čo z nej získaš</th></tr>
+    <tr>
+      <td><strong>Twilio</strong><br><span class="mono">twilio.com</span></td>
+      <td>Vytáčanie a nahrávanie hovorov</td>
+      <td>Account SID, Auth Token, odchádzajúce číslo (ideálne SK, +421)</td>
+    </tr>
+    <tr>
+      <td><strong>OpenAI</strong><br><span class="mono">platform.openai.com</span></td>
+      <td>Agent počúva a odpovedá podľa skriptu; Whisper prepis nahrávky</td>
+      <td>API kľúč s kreditom, prístup k <span class="mono">gpt-4o-mini</span></td>
+    </tr>
+  </table>
+  <p class="small">Twilio na skúšobnom (trial) účte volá len na overené čísla. Na ostrú kampaň treba upgrade a geografické povolenie volať na Slovensko (+421).</p>
+
+  <h2>4. Premenné na Verceli</h2>
+  <p>Vercel → projekt callbot-crm → Settings → Environment Variables → Production. Po zmene Redeploy.</p>
+  <table>
+    <tr><th>Premenná</th><th>Povinné</th><th>Hodnota</th></tr>
+    <tr><td class="mono">APP_URL</td><td>áno</td><td class="mono">https://callbot-crm.vercel.app</td></tr>
+    <tr><td class="mono">DATABASE_URL</td><td>áno</td><td>už má byť z Neon</td></tr>
+    <tr><td class="mono">AUTH_SECRET</td><td>áno</td><td>už má byť; min. 16 znakov</td></tr>
+    <tr><td class="mono">CRON_SECRET</td><td>áno</td><td>musí sedieť — Vercel cron ním autorizuje denný tick</td></tr>
+    <tr><td class="mono">TWILIO_ACCOUNT_SID</td><td>áno na ostro</td><td>z Twilio konzoly</td></tr>
+    <tr><td class="mono">TWILIO_AUTH_TOKEN</td><td>áno na ostro</td><td>z Twilio konzoly</td></tr>
+    <tr><td class="mono">TWILIO_FROM_NUMBER</td><td>áno na ostro</td><td>napr. <span class="mono">+421…</span> (E.164)</td></tr>
+    <tr><td class="mono">OPENAI_API_KEY</td><td>áno na ostro</td><td>sk-…</td></tr>
+  </table>
+  <p class="small">Tie isté Twilio / OpenAI údaje môžeš vložiť aj v aplikácii v <strong>Nastaveniach</strong>. Lepšie sú na Verceli — vo formulári sa kľúče nezobrazujú naspäť.</p>
+
+  <h2>5. Twilio — nastavenie čísla</h2>
+  <p>Aplikácia pri vytáčaní sama pošle Twilio adresy. V konzole ich netreba ručne písať na číslo, ale číslo musí vedieť Voice a nahrávanie.</p>
+  <ul class="check">
+    <li>Kúpiť Voice číslo, ideálne slovenské</li>
+    <li>Voice Geographic permissions: povoliť volanie na <strong>Slovakia</strong></li>
+    <li>Amazon Polly / hlas <span class="mono">Polly.Mia</span>, jazyk <span class="mono">sk-SK</span> (ak Say zlyhá, toto je prvá vec na kontrolu)</li>
+    <li>Overiť, že Account SID + token + From číslo patria k tomu istému účtu</li>
+  </ul>
+  <p>Webhooky, ktoré CRM používa (musia byť verejne dostupné, už sú na Verceli):</p>
+  <table>
+    <tr><th>Účel</th><th>URL</th></tr>
+    <tr><td>Začiatok hovoru (TwiML)</td><td class="mono">https://callbot-crm.vercel.app/api/twilio/voice</td></tr>
+    <tr><td>Ďalšia veta / počúvanie</td><td class="mono">https://callbot-crm.vercel.app/api/twilio/gather</td></tr>
+    <tr><td>Stav hovoru</td><td class="mono">https://callbot-crm.vercel.app/api/twilio/status</td></tr>
+    <tr><td>Nahrávka hotová</td><td class="mono">https://callbot-crm.vercel.app/api/twilio/recording</td></tr>
+  </table>
+  <p class="small"><span class="mono">APP_URL</span> musí byť presne produkčná adresa, inak Twilio podpíše inú URL a webhook vráti 403.</p>
+
+  <h2>6. Krok za krokom v aplikácii</h2>
+  <ol>
+    <li>Prihlásiť sa → <strong>Nastavenia</strong> → zmeniť heslo (min. 10 znakov).</li>
+    <li>V Nastaveniach: poskytovateľ hovorov = <strong>Twilio — živý hovor</strong>. Ak kľúče nie sú na Verceli, doplň SID, token, číslo, OpenAI kľúč. Uložiť.</li>
+    <li><strong>Skript</strong>: vyplniť firmu, ako sa agent predstaví, kto sme, prvú vetu, ponuku, kvalifikačné otázky, výzvu k akcii, námietky, čo nesmie. Bez toho agent nemá o čom hovoriť. Môžeš skúsiť nácvik v boxe na tej istej stránke.</li>
+    <li>Pridať <strong>vlastné skúšobné číslo</strong> v Čísla (nie seedové +421901…) a zaškrtnúť súhlas so spracovaním, ak voláte reálnu osobu.</li>
+    <li>Na karte kontaktu <strong>Volat teraz</strong> — alebo dať číslo do kampane a spustiť kampaň (pracovný čas predvolene 9:00–17:00, pracovné dni, časové pásmo Európa/Bratislava).</li>
+    <li>Po hovore skontrolovať <strong>Hovory</strong>: prepis, úspešnosť, nahrávka, prípadne zachytený e-mail. Výsledok sa dá ručne opraviť.</li>
+  </ol>
+
+  <div class="box ok">
+    <strong>Hotové, keď:</strong> reálne telefón zazvoní, agent po slovensky povie úvod zo skriptu, počká na odpoveď, reaguje, hovor sa nahrá a v histórii je prepis + úspech/neúspech. Simulácia (STUB) v detaile hovoru už nesmie byť.
+  </div>
+
+  <h2>7. Ako to volá (aby si vedel, čo očakávať)</h2>
+  <p>
+    Nie je to súčasný „Realtime“ stream (prekrývanie reči). Na Verceli to ide ako striedanie viet:
+    agent povie vetu → Twilio počúva slovenčinu → ChatGPT vráti ďalšiu vetu (max. 10 výmen) → zloží.
+    Hovor sa nahráva. Po skončení Whisper (ak je OpenAI kľúč) doplní prepis a CRM zapíše kontakt.
+  </p>
+
+  <h2>8. Čo zatiaľ neriešiť / limity</h2>
+  <ul>
+    <li>Viac hovorov naraz (kampaň ide po jednom)</li>
+    <li>Prichádzajúce hovory</li>
+    <li>Zber čísiel z webu nespúšťať, kým to nemá právnik / GDPR zelenú</li>
+    <li>Repo je verejné — žiadne kľúče do GitHubu, len Vercel / Nastavenia</li>
+    <li>Po hovore sa e-maily neodosielajú. Ak kontakt povedal e-mail, ostane zapísaný v CRM.</li>
+  </ul>
+
+  <h2>9. Keď to nefunguje</h2>
+  <table>
+    <tr><th>Príznak</th><th>Čo skontrolovať</th></tr>
+    <tr><td>Hovor je STUB / „simulovaný“</td><td>Poskytovateľ nie je Twilio, alebo chýba SID/token/číslo</td></tr>
+    <tr><td>Twilio error pri spustení</td><td>From číslo, trial obmedzenie, geo permissions +421, kredit</td></tr>
+    <tr><td>Webhook 403</td><td><span class="mono">APP_URL</span> a Auth Token musia sedieť s tým, čo Twilio podpíše</td></tr>
+    <tr><td>Agent mlčí / zloží hneď</td><td>OpenAI kľúč, vyplnený Skript, hlas Polly.Mia / sk-SK</td></tr>
+    <tr><td>Bez prepisu</td><td>OpenAI kľúč + že nahrávka prešla na <span class="mono">/api/twilio/recording</span></td></tr>
+    <tr><td>Kampaň „nič nerobí“</td><td>Status RUNNING, je v pracovných hodinách, sú PENDING členovia, nie DNC</td></tr>
+  </table>
+
+  <footer>
+    CallBot CRM · odovzdanie 14. 9. 2026 · produkcia https://callbot-crm.vercel.app · kód github.com/samuelpatak-png/callbot-crm
+  </footer>
+</body>
+</html>

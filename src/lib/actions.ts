@@ -428,7 +428,6 @@ export async function saveSettingsAction(formData: FormData) {
       openaiApiKey: openaiApiKey || current.openaiApiKey,
       openaiRealtimeModel: String(formData.get("openaiRealtimeModel") || current.openaiRealtimeModel),
       companyName: String(formData.get("companyName") || "CallBot"),
-      mailFrom: String(formData.get("mailFrom") || "").trim() || null,
     },
   });
   revalidatePath("/nastavenia");

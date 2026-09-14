@@ -13,7 +13,7 @@ Aplikácia beží na **Vercel** na adrese [https://callbot-crm.vercel.app](https
 - zber čísiel zo zastaraných .sk webov (až po súhlase so spracovaním)
 - živý hovor cez Twilio: agent počúva, odpovedá podľa skriptu, nahrávka a zápis do CRM
 - história hovorov: hľadanie, štatistiky, CSV, ručná oprava úspešnosti
-- follow-up úlohy sa po termíne vracajú do fronty; e-mail s podkladmi cez Resend
+- follow-up úlohy sa po termíne vracajú do fronty
 - import CSV
 - cron + reťazenie hovorov bez zásahu človeka
 
@@ -33,7 +33,7 @@ Pozri `.env.example`. Povinné:
 - `CRON_SECRET`
 - `APP_URL` — produkčná URL (musí sedieť s Twilio webhookmi)
 
-Voliteľné: `TWILIO_*`, `OPENAI_API_KEY`, `RESEND_API_KEY`, `MAIL_FROM`.
+Voliteľné: `TWILIO_*`, `OPENAI_API_KEY`.
 
 ## Git a návraty
 

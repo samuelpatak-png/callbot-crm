@@ -91,15 +91,6 @@ export default async function SettingsPage({
               Model pre odpovede v hovore
               <input name="openaiRealtimeModel" defaultValue={settings.openaiRealtimeModel} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
             </label>
-            <label className="text-sm font-medium">
-              Odosielateľ e-mailov (Resend)
-              <input name="mailFrom" defaultValue={settings.mailFrom ?? ""} placeholder="CallBot <obchod@firma.sk>" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
-            </label>
-            <p className="text-xs text-slate-500">
-              {config.resendConfigured
-                ? "RESEND_API_KEY je nastavený — podklady po úspešnom hovore sa odošlú."
-                : "Bez RESEND_API_KEY na Verceli ostane e-mail v poradí a v úlohe."}
-            </p>
             <button className="min-h-11 rounded-lg bg-primary px-4 font-semibold text-white">Uložiť nastavenia</button>
           </form>
 
