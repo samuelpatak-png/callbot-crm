@@ -26,6 +26,14 @@ export function formatDate(value: Date | string | null | undefined) {
   }).format(new Date(value));
 }
 
+export function formatDurationSec(value: number | null | undefined) {
+  const sec = Math.max(0, Math.round(Number(value) || 0));
+  if (sec < 60) return `${sec} s`;
+  const minutes = Math.floor(sec / 60);
+  const rest = sec % 60;
+  return rest ? `${minutes} min ${rest} s` : `${minutes} min`;
+}
+
 export function formatMoney(value: number | string | { toNumber?: () => number }) {
   const amount =
     typeof value === "object" && value && "toNumber" in value
