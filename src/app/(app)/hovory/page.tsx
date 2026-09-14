@@ -79,11 +79,11 @@ export default async function CallsPage({
                   </Link>
                   <p className="number-mono text-xs text-slate-500">{call.contact.phone}</p>
                   {call.campaign ? <p className="text-xs text-slate-500">{call.campaign.name}</p> : null}
-                  {call.capturedEmail || call.contact.email ? (
+                  {call.capturedEmail ? (
                     <p className="mt-1 text-sm">
                       E-mail z hovoru:{" "}
-                      <a className="text-primary" href={`mailto:${call.capturedEmail || call.contact.email}`}>
-                        {call.capturedEmail || call.contact.email}
+                      <a className="text-primary" href={`mailto:${call.capturedEmail}`}>
+                        {call.capturedEmail}
                       </a>
                     </p>
                   ) : null}
