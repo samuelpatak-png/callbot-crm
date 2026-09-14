@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
-import { ingestTwilioStatus } from "@/lib/twilio-ingest";
 import { assertTwilioSignature, parseTwilioForm, twilioUnauthorized } from "@/lib/twilio-signature";
+import { continueConversation, hangupTwiml } from "@/lib/twilio-conversation";
+
+export const maxDuration = 60;
 
 async function handle(request: Request) {
   const params = await parseTwilioForm(request);
@@ -9,12 +10,14 @@ async function handle(request: Request) {
   } catch {
     return twilioUnauthorized();
   }
-  const form = new FormData();
-  new URL(request.url).searchParams.forEach((value, key) => form.append(key, value));
-  Object.entries(params).forEach(([key, value]) => form.set(key, value));
-  const callId = new URL(request.url).searchParams.get("callId");
-  const result = await ingestTwilioStatus(form, callId);
-  return NextResponse.json(result);
+
+  const callId = new URL(request.url).searchParams.get("callId") || "";
+  if (!callId) {
+    return hangupTwiml("Ospravedlňujem sa, hovor sa nepodarilo spárovať. Pekný deň.");
+  }
+
+  const speech = params.SpeechResult || params.UnstableSpeechResult || "";
+  return continueConversation({ callId, speech });
 }
 
 export async function POST(request: Request) {

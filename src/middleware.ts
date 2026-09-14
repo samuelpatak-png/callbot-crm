@@ -17,6 +17,12 @@ export function middleware(request: NextRequest) {
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
+  if (request.cookies.get("cb_force_password")?.value && !pathname.startsWith("/nastavenia")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/nastavenia";
+    url.searchParams.set("heslo", "1");
+    return NextResponse.redirect(url);
+  }
   return NextResponse.next();
 }
 

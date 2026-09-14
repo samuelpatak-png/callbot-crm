@@ -10,11 +10,20 @@ import {
   startHarvestAction,
   stopHarvestAction,
 } from "@/lib/actions";
+import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { formatDateTime, harvestSiteStatusLabel, harvestStatusLabel } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function HarvestPage() {
+export default async function HarvestPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ chyba?: string }>;
+}) {
+  const session = await getSession();
+  if (!session || session.role !== "ADMIN") redirect("/");
+  const params = await searchParams;
   const job = await ensureHarvestJob();
   const [sites, queued] = await Promise.all([
     prisma.harvestedSite.findMany({
@@ -46,6 +55,9 @@ export default async function HarvestPage() {
         {job.lastRunAt ? (
           <p className="mt-1 text-xs text-slate-500">Posledný spracovaný web: {formatDateTime(job.lastRunAt)}</p>
         ) : null}
+        {params.chyba === "suhlas" ? (
+          <p className="mt-2 text-sm text-destructive">Zber sa nespustí bez zaškrtnutého súhlasu.</p>
+        ) : null}
         {job.lastError ? <p className="mt-2 text-sm text-amber-700">{job.lastError}</p> : null}
         <HarvestLive running={running} />
         <div className="mt-4 flex flex-wrap gap-2">
@@ -63,6 +75,14 @@ export default async function HarvestPage() {
             </form>
           ) : (
             <form action={startHarvestAction}>
+              <label className="mb-3 flex items-start gap-2 text-sm text-slate-600">
+                <input name="legal" type="checkbox" required className="mt-1" />
+                <span>
+                  Čísla berieme len z verejných firemných stránok. Voláme ich ako B2B, s možnosťou DNC a bez
+                  súhlasu ich nepoužijeme na marketingový newsletter. Spustením potvrdzujem, že to máme právne
+                  pokryté.
+                </span>
+              </label>
               <button className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white">
                 <Play className="h-4 w-4" /> Spustiť zber
               </button>

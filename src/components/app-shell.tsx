@@ -32,10 +32,12 @@ const NAV = [
 export function AppShell({
   children,
   userName,
+  userRole,
   automation,
 }: {
   children: React.ReactNode;
   userName: string;
+  userRole: "ADMIN" | "AGENT";
   automation: "RUNNING" | "PAUSED" | "STOPPED" | "IDLE";
 }) {
   const pathname = usePathname();
@@ -62,7 +64,7 @@ export function AppShell({
           <p className="mt-1 text-xs text-slate-500">{railLabel}</p>
         </div>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Hlavná navigácia">
-          {NAV.map((item) => {
+          {NAV.filter((item) => userRole === "ADMIN" || item.href !== "/zber").map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
@@ -82,6 +84,7 @@ export function AppShell({
         </nav>
         <div className="border-t border-border pt-4">
           <p className="truncate text-sm font-medium">{userName}</p>
+          <p className="text-xs text-slate-500">{userRole === "ADMIN" ? "Správca" : "Agent"}</p>
           <form action={logoutAction}>
             <button
               type="submit"
@@ -99,7 +102,7 @@ export function AppShell({
           <span className="text-xs text-slate-500">{railLabel}</span>
         </header>
         <nav className="flex gap-1 overflow-x-auto border-b border-border bg-white px-2 py-2 md:hidden" aria-label="Mobilná navigácia">
-          {NAV.map((item) => (
+          {NAV.filter((item) => userRole === "ADMIN" || item.href !== "/zber").map((item) => (
             <Link
               key={item.href}
               href={item.href}

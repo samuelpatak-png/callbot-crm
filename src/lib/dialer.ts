@@ -4,10 +4,20 @@ import { appUrl } from "./utils";
 import { getVoiceProvider } from "./voice";
 import { cronSecret } from "./cron-auth";
 import { buildCallBriefing } from "./agent-briefing";
-import { loadPlaybookIntoRealtime } from "./openai-agent";
 import { applyCallDebrief } from "./call-debrief";
+import { getRuntimeConfig } from "./settings";
+import { requeueDueFollowUps } from "./followup-queue";
+import { flushPendingMail } from "./mail";
 
-function inWorkingHours(start: string, end: string, timeZone: string) {
+function weekdayKey(timeZone: string) {
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(new Date());
+  const map: Record<string, string> = { Mon: "1", Tue: "2", Wed: "3", Thu: "4", Fri: "5", Sat: "6", Sun: "7" };
+  return map[weekday] || "0";
+}
+
+function inWorkingHours(start: string, end: string, timeZone: string, workingDays = "1,2,3,4,5") {
+  const days = workingDays.split(",").map((item) => item.trim()).filter(Boolean);
+  if (days.length && !days.includes(weekdayKey(timeZone))) return false;
   const now = new Date();
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
@@ -38,11 +48,10 @@ async function scheduleNextTick(delayMs: number) {
 }
 
 export async function tickDialer() {
-  const settings = await prisma.appSettings.upsert({
-    where: { id: "default" },
-    update: {},
-    create: { id: "default" },
-  });
+  await requeueDueFollowUps();
+  await flushPendingMail();
+
+  const settings = await getRuntimeConfig();
 
   const campaign = await prisma.campaign.findFirst({
     where: { status: "RUNNING" },
@@ -53,7 +62,7 @@ export async function tickDialer() {
     return { ok: true, processed: 0, reason: "no_running_campaign" };
   }
 
-  if (!inWorkingHours(campaign.workingHoursStart, campaign.workingHoursEnd, campaign.timezone)) {
+  if (!inWorkingHours(campaign.workingHoursStart, campaign.workingHoursEnd, campaign.timezone, campaign.workingDays)) {
     await scheduleNextTick(60_000);
     return { ok: true, processed: 0, reason: "outside_working_hours", campaignId: campaign.id };
   }
@@ -94,7 +103,6 @@ export async function tickDialer() {
 
   const provider = getVoiceProvider(settings.voiceProvider);
   const briefing = await buildCallBriefing({ contact: member.contact, campaign });
-  const realtime = await loadPlaybookIntoRealtime(briefing.settings, briefing.instructions);
 
   const call = await prisma.call.create({
     data: {
@@ -103,7 +111,6 @@ export async function tickDialer() {
       direction: "OUTBOUND",
       status: "RINGING",
       agentInstructions: briefing.instructions,
-      realtimeSessionId: realtime.sessionId,
     },
   });
 
@@ -129,7 +136,6 @@ export async function tickDialer() {
       result,
       transcript: result.transcript,
       campaignId: campaign.id,
-      realtimeLoaded: realtime.loaded,
       recordingUrl: result.recordingUrl,
       recordingSid: result.recordingSid,
     });
@@ -143,7 +149,6 @@ export async function tickDialer() {
     result,
     transcript: result.transcript,
     campaignId: campaign.id,
-    realtimeLoaded: realtime.loaded,
     recordingUrl: result.recordingUrl,
     recordingSid: result.recordingSid,
   });

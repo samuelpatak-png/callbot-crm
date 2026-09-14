@@ -1,18 +1,21 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { ContactStatus, DealStage, VoiceProviderKind } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { CallResultKind, ContactStatus, DealStage, UserRole, VoiceProviderKind } from "@prisma/client";
 import { prisma } from "./prisma";
-import { clearSession, loginWithPassword, requireSession } from "./auth";
+import { clearSession, hashPassword, loginWithPassword, requireAdmin, requireSession } from "./auth";
 import { normalizeSkPhone } from "./phone";
 import { getVoiceProvider } from "./voice";
 import { pauseCampaign, resumeCampaign, startCampaign, stopCampaign } from "./dialer";
 import { pauseHarvest, resumeHarvest, startHarvest, stopHarvest, ensureHarvestJob } from "./harvest";
 import { buildCallBriefing, parseObjections } from "./agent-briefing";
-import { loadPlaybookIntoRealtime, rehearseWithChatGpt } from "./openai-agent";
+import { rehearseWithChatGpt } from "./openai-agent";
 import { applyCallDebrief } from "./call-debrief";
+import { getRuntimeConfig } from "./settings";
 
 const phoneSchema = z
   .string()
@@ -26,6 +29,9 @@ export async function loginAction(formData: FormData) {
   const user = await loginWithPassword(email, password);
   if (!user) {
     redirect("/login?error=1");
+  }
+  if (user.mustChangePassword) {
+    redirect("/nastavenia?heslo=1");
   }
   redirect("/");
 }
@@ -47,6 +53,7 @@ export async function createContactAction(formData: FormData) {
       city: z.string().optional(),
       title: z.string().optional(),
       source: z.string().optional(),
+      marketingConsent: z.boolean().optional(),
     })
     .parse({
       firstName: formData.get("firstName"),
@@ -57,6 +64,7 @@ export async function createContactAction(formData: FormData) {
       city: formData.get("city") || "",
       title: formData.get("title") || "",
       source: formData.get("source") || "manuál",
+      marketingConsent: formData.get("marketingConsent") === "on",
     });
 
   let companyId: string | undefined;
@@ -76,6 +84,7 @@ export async function createContactAction(formData: FormData) {
       city: parsed.city || null,
       title: parsed.title || null,
       source: parsed.source,
+      marketingConsent: parsed.marketingConsent ?? false,
       ownerId: session.id,
       companyId,
     },
@@ -195,11 +204,7 @@ export async function placeCallAction(formData: FormData) {
     throw new Error("Tento kontakt je na zozname Nevolať");
   }
 
-  const settings = await prisma.appSettings.upsert({
-    where: { id: "default" },
-    update: {},
-    create: { id: "default" },
-  });
+  const settings = await getRuntimeConfig();
 
   await prisma.contact.update({
     where: { id: contactId },
@@ -207,7 +212,6 @@ export async function placeCallAction(formData: FormData) {
   });
 
   const briefing = await buildCallBriefing({ contact });
-  const realtime = await loadPlaybookIntoRealtime(briefing.settings, briefing.instructions);
   const call = await prisma.call.create({
     data: {
       contactId,
@@ -215,7 +219,6 @@ export async function placeCallAction(formData: FormData) {
       direction: "OUTBOUND",
       status: "RINGING",
       agentInstructions: briefing.instructions,
-      realtimeSessionId: realtime.sessionId,
     },
   });
 
@@ -238,7 +241,6 @@ export async function placeCallAction(formData: FormData) {
     result,
     transcript: result.transcript,
     agentId: session.id,
-    realtimeLoaded: realtime.loaded,
     recordingUrl: result.recordingUrl,
     recordingSid: result.recordingSid,
   });
@@ -406,63 +408,164 @@ export async function importContactsAction(formData: FormData) {
 }
 
 export async function saveSettingsAction(formData: FormData) {
-  await requireSession();
-  const voiceProvider = String(formData.get("voiceProvider") || "STUB") as VoiceProviderKind;
-  await prisma.appSettings.upsert({
+  await requireAdmin();
+  const current = await prisma.appSettings.upsert({
     where: { id: "default" },
-    create: {
-      id: "default",
+    update: {},
+    create: { id: "default" },
+  });
+  const voiceProvider = String(formData.get("voiceProvider") || "STUB") as VoiceProviderKind;
+  const twilioAccountSid = String(formData.get("twilioAccountSid") || "").trim();
+  const twilioAuthToken = String(formData.get("twilioAuthToken") || "").trim();
+  const openaiApiKey = String(formData.get("openaiApiKey") || "").trim();
+  await prisma.appSettings.update({
+    where: { id: "default" },
+    data: {
       voiceProvider,
-      twilioAccountSid: String(formData.get("twilioAccountSid") || "") || null,
-      twilioAuthToken: String(formData.get("twilioAuthToken") || "") || null,
-      twilioFromNumber: String(formData.get("twilioFromNumber") || "") || null,
-      openaiApiKey: String(formData.get("openaiApiKey") || "") || null,
-      openaiRealtimeModel: String(formData.get("openaiRealtimeModel") || "gpt-4o-realtime-preview"),
+      twilioAccountSid: twilioAccountSid || current.twilioAccountSid,
+      twilioAuthToken: twilioAuthToken || current.twilioAuthToken,
+      twilioFromNumber: String(formData.get("twilioFromNumber") || "").trim() || current.twilioFromNumber,
+      openaiApiKey: openaiApiKey || current.openaiApiKey,
+      openaiRealtimeModel: String(formData.get("openaiRealtimeModel") || current.openaiRealtimeModel),
       companyName: String(formData.get("companyName") || "CallBot"),
-    },
-    update: {
-      voiceProvider,
-      twilioAccountSid: String(formData.get("twilioAccountSid") || "") || null,
-      twilioAuthToken: String(formData.get("twilioAuthToken") || "") || null,
-      twilioFromNumber: String(formData.get("twilioFromNumber") || "") || null,
-      openaiApiKey: String(formData.get("openaiApiKey") || "") || null,
-      openaiRealtimeModel: String(formData.get("openaiRealtimeModel") || "gpt-4o-realtime-preview"),
-      companyName: String(formData.get("companyName") || "CallBot"),
+      mailFrom: String(formData.get("mailFrom") || "").trim() || null,
     },
   });
   revalidatePath("/nastavenia");
 }
 
-export async function startHarvestAction() {
-  await requireSession();
+export async function changePasswordAction(formData: FormData) {
+  const session = await requireSession();
+  const currentPassword = String(formData.get("currentPassword") || "");
+  const nextPassword = String(formData.get("newPassword") || "");
+  if (nextPassword.length < 10) {
+    redirect("/nastavenia?heslo=kratke");
+  }
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: session.id } });
+  const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!ok) {
+    redirect("/nastavenia?heslo=zle");
+  }
+  await prisma.user.update({
+    where: { id: session.id },
+    data: {
+      passwordHash: await hashPassword(nextPassword),
+      mustChangePassword: false,
+    },
+  });
+  (await cookies()).delete("cb_force_password");
+  revalidatePath("/nastavenia");
+  redirect("/nastavenia?heslo=ok");
+}
+
+export async function createUserAction(formData: FormData) {
+  await requireAdmin();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const name = String(formData.get("name") || "").trim();
+  const password = String(formData.get("password") || "");
+  const role = String(formData.get("role") || "AGENT") === "ADMIN" ? UserRole.ADMIN : UserRole.AGENT;
+  if (!email || !name || password.length < 10) {
+    redirect("/nastavenia?ucet=chyba");
+  }
+  try {
+    await prisma.user.create({
+      data: {
+        email,
+        name,
+        passwordHash: await hashPassword(password),
+        role,
+        mustChangePassword: true,
+      },
+    });
+  } catch {
+    redirect("/nastavenia?ucet=chyba");
+  }
+  revalidatePath("/nastavenia");
+  redirect("/nastavenia?ucet=ok");
+}
+
+export async function overrideCallResultAction(formData: FormData) {
+  const session = await requireSession();
+  const id = String(formData.get("id") || "");
+  const resultKind = String(formData.get("resultKind") || "") as CallResultKind;
+  if (resultKind !== "SUCCESS" && resultKind !== "FAILURE") return;
+  const call = await prisma.call.findUnique({ where: { id }, include: { contact: true } });
+  if (!call) return;
+  const note = String(formData.get("note") || "").trim();
+  await prisma.call.update({
+    where: { id },
+    data: {
+      resultKind,
+      resultOverridden: true,
+      outcome: resultKind === "SUCCESS" ? call.outcome || "callback" : call.outcome || "not_interested",
+    },
+  });
+  await prisma.contact.update({
+    where: { id: call.contactId },
+    data: {
+      status: resultKind === "SUCCESS" ? "CALLBACK" : call.contact.status === "DNC" ? "DNC" : "NOT_INTERESTED",
+    },
+  });
+  if (note) {
+    await prisma.note.create({
+      data: {
+        contactId: call.contactId,
+        authorId: session.id,
+        body: `Ručná oprava výsledku na ${resultKind === "SUCCESS" ? "úspešný" : "neúspešný"}: ${note}`,
+      },
+    });
+  }
+  await prisma.activity.create({
+    data: {
+      type: "CALL",
+      contactId: call.contactId,
+      userId: session.id,
+      message: `Výsledok hovoru opravený na ${resultKind === "SUCCESS" ? "úspešný" : "neúspešný"}`,
+      payload: { callId: id, resultKind },
+    },
+  });
+  revalidatePath("/hovory");
+  revalidatePath(`/kontakty/${call.contactId}`);
+}
+
+export async function startHarvestAction(formData: FormData) {
+  await requireAdmin();
+  if (formData.get("legal") !== "on") {
+    redirect("/zber?chyba=suhlas");
+  }
+  await prisma.harvestJob.upsert({
+    where: { id: "default" },
+    update: { legalAcknowledgedAt: new Date() },
+    create: { id: "default", legalAcknowledgedAt: new Date() },
+  });
   await startHarvest();
   revalidatePath("/zber");
   revalidatePath("/");
 }
 
 export async function pauseHarvestAction() {
-  await requireSession();
+  await requireAdmin();
   await pauseHarvest();
   revalidatePath("/zber");
   revalidatePath("/");
 }
 
 export async function resumeHarvestAction() {
-  await requireSession();
+  await requireAdmin();
   await resumeHarvest();
   revalidatePath("/zber");
   revalidatePath("/");
 }
 
 export async function stopHarvestAction() {
-  await requireSession();
+  await requireAdmin();
   await stopHarvest();
   revalidatePath("/zber");
   revalidatePath("/");
 }
 
 export async function saveHarvestSettingsAction(formData: FormData) {
-  await requireSession();
+  await requireAdmin();
   await ensureHarvestJob();
   const queries = String(formData.get("queries") || "")
     .split(/\r?\n/)
@@ -488,7 +591,7 @@ export async function saveHarvestSettingsAction(formData: FormData) {
 }
 
 export async function savePlaybookAction(formData: FormData) {
-  await requireSession();
+  await requireAdmin();
   let objections = parseObjections([]);
   try {
     objections = parseObjections(JSON.parse(String(formData.get("objections") || "[]")));

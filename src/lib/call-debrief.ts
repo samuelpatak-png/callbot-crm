@@ -2,6 +2,8 @@ import type { CallResultKind, ContactStatus, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import type { PlaceCallResult } from "./voice";
 import { classifyCallResult, extractEmailFromTranscript, normalizeEmail } from "./call-capture";
+import { getRuntimeConfig } from "./settings";
+import { queueMaterialsEmail } from "./mail";
 
 export type CallDebrief = {
   summary: string;
@@ -127,15 +129,15 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string, t
     ...base,
     summary: capturedEmail
       ? `Hovor s ${name} prebehol. Má poslať podklady na ${capturedEmail}.`
-      : `Hovor s ${name} prebehol. ${result.summary}`,
-    contactStatus: capturedEmail ? "CALLBACK" : "CONNECTED",
-    resultKind: capturedEmail ? "SUCCESS" : "FAILURE",
-    followUpAt: capturedEmail ? hoursFromNow(24) : null,
+      : `Hovor s ${name} prebehol. Treba dohodnúť ďalší krok.`,
+    contactStatus: capturedEmail || result.outcome === "callback" ? "CALLBACK" : "CONNECTED",
+    resultKind: "SUCCESS",
+    followUpAt: hoursFromNow(24),
     note: capturedEmail
       ? `Po hovore: spojený, e-mail ${capturedEmail}. ${result.summary}`
       : `Po hovore: spojený. ${result.summary}`,
-    taskTitle: capturedEmail ? `Poslať podklady na ${capturedEmail} — ${name}` : null,
-    taskDueAt: capturedEmail ? hoursFromNow(24) : null,
+    taskTitle: capturedEmail ? `Poslať podklady na ${capturedEmail} — ${name}` : `Dohodnúť ďalší krok — ${name}`,
+    taskDueAt: hoursFromNow(24),
   };
   return connected;
 }
@@ -276,6 +278,21 @@ export async function applyCallDebrief(opts: {
   const recordingUrl = opts.recordingUrl ?? opts.result.recordingUrl ?? existing?.recordingUrl ?? null;
   const recordingSid = opts.recordingSid ?? opts.result.recordingSid ?? existing?.recordingSid ?? null;
 
+  if (existing?.resultOverridden) {
+    await prisma.call.update({
+      where: { id: opts.callId },
+      data: {
+        durationSec: opts.result.durationSec || existing.durationSec,
+        recordingUrl,
+        recordingSid,
+        transcript: opts.transcript || opts.result.transcript || existing.transcript,
+        providerCallSid: opts.result.providerCallSid || existing.providerCallSid,
+        status: opts.result.status === "RINGING" ? existing.status : opts.result.status,
+      },
+    });
+    return null;
+  }
+
   if (opts.result.status === "RINGING") {
     await prisma.call.update({
       where: { id: opts.callId },
@@ -296,12 +313,12 @@ export async function applyCallDebrief(opts: {
   }
 
   const transcript = opts.transcript || opts.result.transcript || existing?.transcript || "";
-  const settings = await prisma.appSettings.findUnique({ where: { id: "default" } });
+  const config = await getRuntimeConfig();
   const debrief = await analyzeCallTranscript({
     transcript,
     result: opts.result,
     contactName: opts.contactName,
-    apiKey: settings?.openaiApiKey ?? null,
+    apiKey: config.openaiApiKey,
   });
 
   const summary = opts.realtimeLoaded
@@ -416,6 +433,15 @@ export async function applyCallDebrief(opts: {
       }
     }
   });
+
+  if (debrief.resultKind === "SUCCESS" && debrief.capturedEmail) {
+    await queueMaterialsEmail({
+      contactId: opts.contactId,
+      callId: opts.callId,
+      toEmail: debrief.capturedEmail,
+      contactName: opts.contactName,
+    });
+  }
 
   return debrief;
 }

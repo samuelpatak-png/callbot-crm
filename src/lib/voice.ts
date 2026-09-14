@@ -189,7 +189,7 @@ export class TwilioVoiceProvider implements VoiceProvider {
       status: "RINGING",
       outcome: data.status || "queued",
       durationSec: 0,
-      summary: `Hovor cez Twilio na ${input.to} bol zaradený. Realtime AI sa napojí cez webhook.`,
+      summary: `Hovor cez Twilio na ${input.to} bol zaradený. Agent sa spája na linku.`,
     };
   }
 }

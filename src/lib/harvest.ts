@@ -182,6 +182,7 @@ async function saveContact(opts: {
         source: `zber:${opts.domain}`,
         websiteUrl: opts.url,
         companyId: company.id,
+        marketingConsent: false,
       },
     });
     await prisma.contactTag

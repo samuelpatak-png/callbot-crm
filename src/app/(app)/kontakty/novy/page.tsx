@@ -18,6 +18,10 @@ export default function NewContactPage() {
         </div>
         <Field name="city" label="Mesto" />
         <Field name="source" label="Zdroj" placeholder="web, zoznam, partner..." />
+        <label className="flex items-start gap-2 text-sm">
+          <input name="marketingConsent" type="checkbox" className="mt-1" />
+          <span>Kontakt súhlasil so spracovaním na obchodné volanie (GDPR / B2B).</span>
+        </label>
         <button className="min-h-11 rounded-lg bg-accent px-4 font-semibold text-white">Uložiť kontakt</button>
       </form>
     </div>

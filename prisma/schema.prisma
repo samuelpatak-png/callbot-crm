@@ -90,6 +90,17 @@ enum VoiceProviderKind {
   TWILIO
 }
 
+enum UserRole {
+  ADMIN
+  AGENT
+}
+
+enum MailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 enum HarvestStatus {
   IDLE
   RUNNING
@@ -110,12 +121,14 @@ enum HarvestSiteStatus {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String
+  passwordHash       String
+  role               UserRole @default(ADMIN)
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   ownedContacts Contact[] @relation("ContactOwner")
   notes         Note[]
@@ -155,10 +168,11 @@ model Contact {
   nextFollowUpAt DateTime?
   lastCalledAt   DateTime?
   companyId      String?
-  ownerId        String?
-  websiteUrl     String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  ownerId          String?
+  websiteUrl       String?
+  marketingConsent Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   company  Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
   owner    User?     @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -169,6 +183,7 @@ model Contact {
   tags     ContactTag[]
   members  CampaignMember[]
   activities Activity[]
+  mails    MailMessage[]
 
   @@index([status])
   @@index([nextFollowUpAt])
@@ -226,6 +241,7 @@ model Campaign {
   workingHoursStart    String         @default("09:00")
   workingHoursEnd      String         @default("17:00")
   timezone             String         @default("Europe/Bratislava")
+  workingDays          String         @default("1,2,3,4,5")
   startedAt            DateTime?
   pausedAt             DateTime?
   stoppedAt            DateTime?
@@ -281,12 +297,15 @@ model Call {
   resultKind      CallResultKind @default(PENDING)
   capturedEmail   String?
   debriefedAt     DateTime?
+  resultOverridden Boolean      @default(false)
+  conversationTurns Int         @default(0)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   contact  Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
   campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   agent    User?     @relation("CallAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  mails    MailMessage[]
 
   @@index([contactId, startedAt])
   @@index([campaignId])
@@ -352,10 +371,33 @@ model AppSettings {
   twilioAuthToken     String?
   twilioFromNumber    String?
   openaiApiKey        String?
-  openaiRealtimeModel String            @default("gpt-4o-realtime-preview")
+  openaiRealtimeModel String            @default("gpt-4o-mini")
   companyName         String            @default("CallBot")
+  mailFrom            String?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
+}
+
+model MailMessage {
+  id        String     @id @default(cuid())
+  contactId String
+  callId    String?
+  toEmail   String
+  subject   String
+  body      String
+  status    MailStatus @default(PENDING)
+  error     String?
+  provider  String?
+  sentAt    DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  call    Call?   @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  @@index([contactId, createdAt])
+  @@index([status])
+  @@index([callId])
 }
 
 model CallPlaybook {
@@ -398,8 +440,9 @@ model HarvestJob {
   lastRunAt          DateTime?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
-  sources            String[]       @default(["zoznam", "azet"])
-  sites              HarvestedSite[]
+  sources               String[]       @default(["zoznam", "azet"])
+  legalAcknowledgedAt   DateTime?
+  sites                 HarvestedSite[]
 
   @@index([status])
 }

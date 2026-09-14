@@ -29,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           : "IDLE";
 
   return (
-    <AppShell userName={session.name} automation={automation}>
+    <AppShell userName={session.name} userRole={session.role} automation={automation}>
       {children}
     </AppShell>
   );

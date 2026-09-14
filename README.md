@@ -8,10 +8,12 @@ Aplikácia beží na **Vercel** na adrese [https://callbot-crm.vercel.app](https
 
 - zoznam telefónnych čísel s kliknutím na **Volat**
 - karty kontaktov: poznámky, follow-up dátumy, stav, DNC
-- pipeline dealov
-- kampane so **spusti / pozastav / zastav**
-- zber čísiel zo **zastaraných / škaredých .sk webov** (bez AI, pomalé weby von, čísla bez duplicít)
-- automatický dialer (simulačný adaptér, neskôr Twilio + ChatGPT Realtime)
+- pipeline dealov (úspešný hovor otvorí lead)
+- kampane so **spusti / pozastav / zastav**, pracovné dni a hodiny
+- zber čísiel zo zastaraných .sk webov (až po súhlase so spracovaním)
+- živý hovor cez Twilio: agent počúva, odpovedá podľa skriptu, nahrávka a zápis do CRM
+- história hovorov: hľadanie, štatistiky, CSV, ručná oprava úspešnosti
+- follow-up úlohy sa po termíne vracajú do fronty; e-mail s podkladmi cez Resend
 - import CSV
 - cron + reťazenie hovorov bez zásahu človeka
 
@@ -20,7 +22,7 @@ Aplikácia beží na **Vercel** na adrese [https://callbot-crm.vercel.app](https
 Predvolený účet po seede:
 
 - e-mail: `admin@callbot.local`
-- heslo: hodnota `INITIAL_ADMIN_PASSWORD` na Verceli (predvolene `CallBot2026!`)
+- heslo: `INITIAL_ADMIN_PASSWORD` na Verceli — po prvom prihlásení ho zmeň v Nastaveniach
 
 ## Premenné prostredia
 
@@ -29,9 +31,9 @@ Pozri `.env.example`. Povinné:
 - `DATABASE_URL` — Neon (doplní Vercel integrácia)
 - `AUTH_SECRET`
 - `CRON_SECRET`
-- `APP_URL` — produkčná URL
+- `APP_URL` — produkčná URL (musí sedieť s Twilio webhookmi)
 
-Voliteľné neskôr: `TWILIO_*`, `OPENAI_API_KEY`.
+Voliteľné: `TWILIO_*`, `OPENAI_API_KEY`, `RESEND_API_KEY`, `MAIL_FROM`.
 
 ## Git a návraty
 

@@ -2,14 +2,16 @@ import Link from "next/link";
 import { PauseCircle, PlayCircle, CalendarClock } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { campaignStatusLabel, contactStatusLabel, callResultKindLabel, formatDateTime, formatMoney, harvestStatusLabel } from "@/lib/utils";
-import { pauseCampaignAction, resumeCampaignAction, startCampaignAction, startHarvestAction } from "@/lib/actions";
+import { pauseCampaignAction, resumeCampaignAction, startCampaignAction } from "@/lib/actions";
+import { bratislavaDayRange } from "@/lib/call-search";
 
 export default async function DashboardPage() {
+  const today = bratislavaDayRange();
   const [contacts, callsToday, openTasks, running, deals, due, recentCalls, campaigns, harvest] =
     await Promise.all([
       prisma.contact.count(),
       prisma.call.count({
-        where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+        where: { startedAt: { gte: today.gte, lte: today.lte } },
       }),
       prisma.task.count({ where: { status: "OPEN" } }),
       prisma.campaign.findFirst({
@@ -32,13 +34,13 @@ export default async function DashboardPage() {
     ]);
 
   const connected = await prisma.call.count({
-    where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: "COMPLETED" },
+    where: { startedAt: { gte: today.gte, lte: today.lte }, status: "COMPLETED" },
   });
   const successToday = await prisma.call.count({
-    where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, resultKind: "SUCCESS" },
+    where: { startedAt: { gte: today.gte, lte: today.lte }, resultKind: "SUCCESS" },
   });
   const failureToday = await prisma.call.count({
-    where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, resultKind: "FAILURE" },
+    where: { startedAt: { gte: today.gte, lte: today.lte }, resultKind: "FAILURE" },
   });
 
   return (
@@ -132,12 +134,13 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">
-              Hľadá zastaralé .sk weby, preskakuje pomalé a neukladá to isté číslo dvakrát.
-              <form action={startHarvestAction} className="mt-3">
-                <button className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-3 text-sm font-semibold text-white">
-                  <PlayCircle className="h-4 w-4" /> Spustiť zber
-                </button>
-              </form>
+              Hľadá zastaralé .sk weby. Spúšťa sa až po súhlase so spracovaním na stránke zberu.
+              <Link
+                href="/zber"
+                className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-white"
+              >
+                Otvoriť zber
+              </Link>
             </div>
           )}
         </div>

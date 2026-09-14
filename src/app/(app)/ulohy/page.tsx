@@ -16,7 +16,7 @@ export default async function TasksPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Úlohy a termíny</h1>
-        <p className="text-sm text-slate-500">Follow-upy, ktoré CRM vie neskôr automaticky zaradiť do fronty.</p>
+        <p className="text-sm text-slate-500">Follow-upy po hovore. Po termíne ich dialer zaradí späť do fronty.</p>
       </div>
 
       <form action={addTaskAction} className="grid gap-2 rounded-2xl border border-border bg-white p-4 sm:grid-cols-4">

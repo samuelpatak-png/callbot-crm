@@ -1,6 +1,6 @@
 import type { CallResultKind, ContactStatus } from "@prisma/client";
 
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const EMAIL_RE = /[A-Za-zÀ-ž0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/u;
 
 export function normalizeEmail(value: string | null | undefined) {
   const trimmed = String(value || "").trim().toLowerCase();
@@ -23,9 +23,10 @@ export function classifyCallResult(opts: {
   capturedEmail: string | null;
 }): CallResultKind {
   if (opts.contactStatus === "INTERESTED" || opts.contactStatus === "CONVERTED") return "SUCCESS";
-  if (opts.outcome === "interested") return "SUCCESS";
-  if (opts.outcome === "callback") return "SUCCESS";
+  if (opts.contactStatus === "CALLBACK") return "SUCCESS";
+  if (opts.outcome === "interested" || opts.outcome === "callback") return "SUCCESS";
   if (opts.capturedEmail) return "SUCCESS";
+  if (opts.contactStatus === "CONNECTED" && opts.outcome === "connected") return "SUCCESS";
   return "FAILURE";
 }
 

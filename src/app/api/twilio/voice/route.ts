@@ -1,50 +1,50 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ensurePlaybook } from "@/lib/agent-briefing";
+import { assertTwilioSignature, parseTwilioForm, twilioUnauthorized } from "@/lib/twilio-signature";
+import { openingTwiml, hangupTwiml } from "@/lib/twilio-conversation";
 
-function xmlEscape(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+export const maxDuration = 30;
+
+async function handle(request: Request) {
+  const params = await parseTwilioForm(request);
+  try {
+    await assertTwilioSignature(request, params);
+  } catch {
+    return twilioUnauthorized();
+  }
+
+  const callId = new URL(request.url).searchParams.get("callId") || params.CallSid || "";
+  const call = callId
+    ? await prisma.call.findFirst({
+        where: callId.startsWith("CA") ? { providerCallSid: callId } : { id: callId },
+        select: { id: true },
+      })
+    : params.CallSid
+      ? await prisma.call.findFirst({ where: { providerCallSid: params.CallSid }, select: { id: true } })
+      : null;
+
+  if (!call) {
+    return hangupTwiml("Ospravedlňujem sa, hovor sa nepodarilo spárovať. Pekný deň.");
+  }
+
+  if (params.CallSid) {
+    await prisma.call.update({
+      where: { id: call.id },
+      data: { providerCallSid: params.CallSid, status: "IN_PROGRESS" },
+    });
+  }
+
+  return openingTwiml(call.id);
 }
 
 export async function POST(request: Request) {
-  const callId = new URL(request.url).searchParams.get("callId");
-  const playbook = await ensurePlaybook();
-  const call = callId
-    ? await prisma.call.findUnique({
-        where: { id: callId },
-        select: { agentInstructions: true, realtimeSessionId: true },
-      })
-    : null;
-
-  const opening =
-    playbook.openingLine.trim() ||
-    "Dobrý deň, volám z CallBotu. Skript pre ChatGPT je pripravený, hovor sa spája.";
-  const loaded = Boolean(call?.realtimeSessionId || call?.agentInstructions);
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say language="sk-SK" voice="Polly.Mia">Tento hovor nahrávame pre automatický zápis do CRM.</Say>
-  <Pause length="1"/>
-  <Say language="sk-SK" voice="Polly.Mia">${xmlEscape(opening.slice(0, 500))}</Say>
-  <Pause length="1"/>
-  <Say language="sk-SK" voice="Polly.Mia">${
-    loaded
-      ? "ChatGPT má načítaný firemný skript a argumenty. Živé pripojenie hlasu sa dokončí cez Realtime reláciu."
-      : "Firemný skript ešte nie je pripojený k tomuto hovoru."
-  }</Say>
-  <Hangup/>
-</Response>`;
-
-  return new NextResponse(xml, {
-    headers: { "Content-Type": "text/xml; charset=utf-8" },
-  });
+  return handle(request);
 }
 
 export async function GET(request: Request) {
-  return POST(request);
+  return handle(request);
+}
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
 }

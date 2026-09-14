@@ -9,9 +9,14 @@ import {
   formatDurationSec,
 } from "@/lib/utils";
 import { RecordingPlayer } from "@/components/recording-player";
+import { overrideCallResultAction } from "@/lib/actions";
 import {
+  CALL_PAGE_SIZE,
+  callHistoryByCampaign,
   callHistoryHasFilters,
+  callHistoryQuery,
   callHistoryStats,
+  callHistoryTrend,
   callHistoryWhere,
   parseCallHistoryFilters,
 } from "@/lib/call-search";
@@ -42,26 +47,48 @@ export default async function CallsPage({
   const filters = parseCallHistoryFilters(params);
   const filtered = callHistoryHasFilters(filters);
   const where = await callHistoryWhere(filters);
+  const skip = (filters.strana - 1) * CALL_PAGE_SIZE;
 
-  const [calls, selection, overall] = await Promise.all([
+  const [calls, selection, overall, campaigns, byCampaign, trend] = await Promise.all([
     prisma.call.findMany({
       where,
       orderBy: { startedAt: "desc" },
-      take: 250,
-      include: { contact: true, campaign: true },
+      skip,
+      take: CALL_PAGE_SIZE,
+      include: { contact: true, campaign: true, mails: { orderBy: { createdAt: "desc" }, take: 1 } },
     }),
     callHistoryStats(where),
     filtered ? callHistoryStats({}) : Promise.resolve(null),
+    prisma.campaign.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    callHistoryByCampaign(where),
+    callHistoryTrend(7),
   ]);
+
+  const pages = Math.max(1, Math.ceil(selection.total / CALL_PAGE_SIZE));
+  const query = callHistoryQuery(filters);
+  const exportQs = query.toString();
+  const pageHref = (page: number) => {
+    const next = new URLSearchParams(query);
+    next.set("strana", String(page));
+    return `/hovory?${next.toString()}`;
+  };
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Hovory</h1>
-        <p className="text-sm text-slate-500">
-          História sa dá vyhľadať podľa mena, dátumu, času, čísla, e-mailu a úspešnosti. Štatistiky
-          sa prepočítajú podľa aktuálneho výberu.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Hovory</h1>
+          <p className="text-sm text-slate-500">
+            História podľa mena, dátumu, času, čísla, e-mailu, kampane a úspešnosti. Štatistiky patria k
+            aktuálnemu výberu.
+          </p>
+        </div>
+        <a
+          href={`/api/hovory/export${exportQs ? `?${exportQs}` : ""}`}
+          className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium"
+        >
+          Stiahnuť CSV
+        </a>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -70,59 +97,61 @@ export default async function CallsPage({
           value={String(selection.total)}
           hint={filtered && overall ? `z ${overall.total} v histórii` : "v databáze"}
         />
-        <Stat
-          label="Úspešné"
-          value={String(selection.success)}
-          hint={percent(selection.success, selection.total)}
-        />
-        <Stat
-          label="Neúspešné"
-          value={String(selection.failure)}
-          hint={percent(selection.failure, selection.total)}
-        />
+        <Stat label="Úspešné" value={String(selection.success)} hint={percent(selection.success, selection.total)} />
+        <Stat label="Neúspešné" value={String(selection.failure)} hint={percent(selection.failure, selection.total)} />
         <Stat
           label="Priemerné trvanie"
           value={formatDurationSec(selection.avgDurationSec)}
           hint={selection.pending ? `${selection.pending} ešte prebieha` : "dokončené aj nedvihnuté"}
         />
-        <Stat
-          label="S e-mailom"
-          value={String(selection.withEmail)}
-          hint="zachytený z hovoru"
-        />
+        <Stat label="S e-mailom" value={String(selection.withEmail)} hint="zachytený z hovoru" />
+      </section>
+
+      <section className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+        <article className="rounded-2xl border border-border bg-white p-4">
+          <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">Posledných 7 dní</p>
+          <ul className="mt-3 space-y-1 text-sm">
+            {trend.length === 0 ? <li className="text-slate-500">Zatiaľ bez hovorov v tomto týždni.</li> : null}
+            {trend.map((row) => (
+              <li key={row.day} className="flex justify-between gap-3">
+                <span>{new Date(`${row.day}T12:00:00`).toLocaleDateString("sk-SK")}</span>
+                <span className="number-mono text-slate-600">
+                  {row.total} · {row.success} úsp. · {row.failure} neúsp.
+                </span>
+              </li>
+            ))}
+          </ul>
+        </article>
+        <article className="rounded-2xl border border-border bg-white p-4">
+          <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">Podľa kampane</p>
+          <ul className="mt-3 space-y-1 text-sm">
+            {byCampaign.length === 0 ? <li className="text-slate-500">Žiadne hovory v tomto výbere.</li> : null}
+            {byCampaign.slice(0, 8).map((row) => (
+              <li key={row.id || "none"} className="flex justify-between gap-3">
+                <span className="truncate">{row.name}</span>
+                <span className="number-mono text-slate-600">{row.total}</span>
+              </li>
+            ))}
+          </ul>
+        </article>
       </section>
 
       <form action="/hovory" method="get" className="space-y-3 rounded-2xl border border-border bg-white p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <label className="text-sm font-medium">
             Meno
-            <input
-              name="meno"
-              defaultValue={filters.meno}
-              placeholder="Jana Horváthová"
-              className="mt-1 min-h-11 w-full rounded-lg border border-border px-3"
-            />
+            <input name="meno" defaultValue={filters.meno} placeholder="Jana Horváthová" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
           </label>
           <label className="text-sm font-medium">
             Telefónne číslo
-            <input
-              name="cislo"
-              defaultValue={filters.cislo}
-              placeholder="+421 901 100 001"
-              className="number-mono mt-1 min-h-11 w-full rounded-lg border border-border px-3"
-            />
+            <input name="cislo" defaultValue={filters.cislo} placeholder="+421 901 100 001" className="number-mono mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
           </label>
           <label className="text-sm font-medium">
             E-mail
-            <input
-              name="mail"
-              defaultValue={filters.mail}
-              placeholder="meno@firma.sk"
-              className="mt-1 min-h-11 w-full rounded-lg border border-border px-3"
-            />
+            <input name="mail" defaultValue={filters.mail} placeholder="meno@firma.sk" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
           </label>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <label className="text-sm font-medium">
             Dátum od
             <input name="od" type="date" defaultValue={filters.od} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
@@ -148,6 +177,17 @@ export default async function CallsPage({
               <option value="prebieha">Prebiehajúce</option>
             </select>
           </label>
+          <label className="text-sm font-medium">
+            Kampaň
+            <select name="kampan" defaultValue={filters.kampan} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3">
+              <option value="">Všetky</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.id} value={campaign.id}>
+                  {campaign.name}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-white">Hľadať</button>
@@ -169,6 +209,7 @@ export default async function CallsPage({
         ) : null}
         {calls.map((call) => {
           const meta = debriefMeta(call.debrief);
+          const mail = call.mails[0];
           return (
             <article key={call.id} className="rounded-2xl border border-border bg-white p-4 sm:p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -188,12 +229,16 @@ export default async function CallsPage({
                   ) : call.contact.email ? (
                     <p className="mt-1 text-sm text-slate-500">E-mail v karte: {call.contact.email}</p>
                   ) : null}
+                  {mail ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Podklady: {mail.status === "SENT" ? "odoslané" : mail.status === "FAILED" ? "odoslanie zlyhalo" : "čakajú na RESEND_API_KEY"}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="text-right text-sm">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${callResultKindTone[call.resultKind]}`}
-                  >
+                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${callResultKindTone[call.resultKind]}`}>
                     {callResultKindLabel[call.resultKind]}
+                    {call.resultOverridden ? " · ručne" : ""}
                   </span>
                   <p className="mt-1 font-medium">{callOutcomeLabel(call.outcome)}</p>
                   <p className="text-xs text-slate-500">
@@ -218,10 +263,42 @@ export default async function CallsPage({
                   </pre>
                 </details>
               ) : null}
+              {call.resultKind !== "PENDING" ? (
+                <form action={overrideCallResultAction} className="mt-3 flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="id" value={call.id} />
+                  <label className="text-xs font-medium">
+                    Opraviť výsledok
+                    <select name="resultKind" defaultValue={call.resultKind} className="mt-1 min-h-11 rounded-lg border border-border px-3 text-sm">
+                      <option value="SUCCESS">Úspešný</option>
+                      <option value="FAILURE">Neúspešný</option>
+                    </select>
+                  </label>
+                  <input name="note" placeholder="Dôvod opravy" className="min-h-11 min-w-[12rem] flex-1 rounded-lg border border-border px-3 text-sm" />
+                  <button className="min-h-11 rounded-lg border border-border px-3 text-sm">Uložiť</button>
+                </form>
+              ) : null}
             </article>
           );
         })}
       </div>
+
+      {pages > 1 ? (
+        <nav className="flex flex-wrap items-center gap-2 text-sm" aria-label="Stránkovanie hovorov">
+          {filters.strana > 1 ? (
+            <Link href={pageHref(filters.strana - 1)} className="rounded-lg border border-border px-3 py-2">
+              Predošlá
+            </Link>
+          ) : null}
+          <span className="text-slate-500">
+            Strana {filters.strana} z {pages}
+          </span>
+          {filters.strana < pages ? (
+            <Link href={pageHref(filters.strana + 1)} className="rounded-lg border border-border px-3 py-2">
+              Ďalšia
+            </Link>
+          ) : null}
+        </nav>
+      ) : null}
     </div>
   );
 }

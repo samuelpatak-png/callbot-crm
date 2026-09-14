@@ -1,60 +1,144 @@
 import { prisma } from "@/lib/prisma";
-import { saveSettingsAction } from "@/lib/actions";
+import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import Link from "next/link";
+import { changePasswordAction, createUserAction, saveSettingsAction } from "@/lib/actions";
+import { getRuntimeConfig, maskSecret, secretStored } from "@/lib/settings";
 
-export default async function SettingsPage() {
-  const settings = await prisma.appSettings.upsert({
-    where: { id: "default" },
-    update: {},
-    create: { id: "default" },
-  });
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ heslo?: string; ucet?: string }>;
+}) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  const params = await searchParams;
+  const admin = session.role === "ADMIN";
+  const [settings, config, users] = await Promise.all([
+    prisma.appSettings.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } }),
+    getRuntimeConfig(),
+    admin ? prisma.user.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Nastavenia</h1>
         <p className="text-sm text-slate-500">
-          Twilio a ChatGPT Live API. Hovory sa nahrávajú, prepis a e-mail z hovoru sa zapíšu sami. Skript, predstavenie a argumenty nastavíš v{" "}
+          Kľúče radšej dajte do Vercelu. V databáze sa neukazujú. Živý hovor ide cez Twilio: agent počúva,
+          odpovedá podľa skriptu a po hovore sa zapíše CRM.{" "}
           <Link href="/skript" className="text-primary underline-offset-2 hover:underline">
-            Skripte
+            Skript
           </Link>
-          . Kým kľúče nie sú vyplnené, dialer používa simuláciu.
+          .
         </p>
       </div>
-      <form action={saveSettingsAction} className="grid gap-4 rounded-2xl border border-border bg-white p-6">
+
+      {session.mustChangePassword || params.heslo === "1" ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+          Predvolené heslo treba zmeniť. Repo je verejné, staré heslo tam nepatrí.
+        </p>
+      ) : null}
+      {params.heslo === "ok" ? <p className="text-sm text-emerald-700">Heslo je zmenené.</p> : null}
+      {params.heslo === "zle" ? <p className="text-sm text-destructive">Terajšie heslo nesedí.</p> : null}
+      {params.heslo === "kratke" ? <p className="text-sm text-destructive">Nové heslo musí mať aspoň 10 znakov.</p> : null}
+
+      <form action={changePasswordAction} className="grid gap-4 rounded-2xl border border-border bg-white p-6">
+        <h2 className="font-semibold">Zmena hesla</h2>
         <label className="text-sm font-medium">
-          Názov spoločnosti
-          <input name="companyName" defaultValue={settings.companyName} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+          Terajšie heslo
+          <input name="currentPassword" type="password" required className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
         </label>
         <label className="text-sm font-medium">
-          Poskytovateľ hovorov
-          <select name="voiceProvider" defaultValue={settings.voiceProvider} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3">
-            <option value="STUB">Simulácia (teraz)</option>
-            <option value="TWILIO">Twilio API</option>
-          </select>
+          Nové heslo
+          <input name="newPassword" type="password" required minLength={10} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
         </label>
-        <label className="text-sm font-medium">
-          Twilio Account SID
-          <input name="twilioAccountSid" defaultValue={settings.twilioAccountSid ?? ""} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
-        </label>
-        <label className="text-sm font-medium">
-          Twilio Auth Token
-          <input name="twilioAuthToken" type="password" defaultValue={settings.twilioAuthToken ?? ""} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
-        </label>
-        <label className="text-sm font-medium">
-          Twilio odchádzajúce číslo
-          <input name="twilioFromNumber" defaultValue={settings.twilioFromNumber ?? ""} placeholder="+421..." className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
-        </label>
-        <label className="text-sm font-medium">
-          OpenAI API kľúč (ChatGPT Realtime)
-          <input name="openaiApiKey" type="password" defaultValue={settings.openaiApiKey ?? ""} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
-        </label>
-        <label className="text-sm font-medium">
-          Realtime model
-          <input name="openaiRealtimeModel" defaultValue={settings.openaiRealtimeModel} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
-        </label>
-        <button className="min-h-11 rounded-lg bg-primary px-4 font-semibold text-white">Uložiť nastavenia</button>
+        <button className="min-h-11 rounded-lg border border-border px-4 font-semibold">Zmeniť heslo</button>
       </form>
+
+      {admin ? (
+        <>
+          <form action={saveSettingsAction} className="grid gap-4 rounded-2xl border border-border bg-white p-6">
+            <h2 className="font-semibold">Hlas a kľúče</h2>
+            <label className="text-sm font-medium">
+              Názov spoločnosti
+              <input name="companyName" defaultValue={settings.companyName} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              Poskytovateľ hovorov
+              <select name="voiceProvider" defaultValue={settings.voiceProvider} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3">
+                <option value="STUB">Simulácia</option>
+                <option value="TWILIO">Twilio — živý hovor</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium">
+              Twilio Account SID {config.twilioFromEnv ? "(Vercel)" : ""}
+              <input name="twilioAccountSid" placeholder={maskSecret(secretStored(settings.twilioAccountSid), config.twilioFromEnv)} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" autoComplete="off" />
+            </label>
+            <label className="text-sm font-medium">
+              Twilio Auth Token
+              <input name="twilioAuthToken" type="password" placeholder={maskSecret(secretStored(settings.twilioAuthToken), config.twilioFromEnv)} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" autoComplete="off" />
+            </label>
+            <label className="text-sm font-medium">
+              Twilio odchádzajúce číslo
+              <input name="twilioFromNumber" defaultValue={settings.twilioFromNumber ?? ""} placeholder="+421..." className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              OpenAI API kľúč {config.openaiFromEnv ? "(Vercel)" : ""}
+              <input name="openaiApiKey" type="password" placeholder={maskSecret(secretStored(settings.openaiApiKey), config.openaiFromEnv)} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" autoComplete="off" />
+            </label>
+            <label className="text-sm font-medium">
+              Model pre odpovede v hovore
+              <input name="openaiRealtimeModel" defaultValue={settings.openaiRealtimeModel} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              Odosielateľ e-mailov (Resend)
+              <input name="mailFrom" defaultValue={settings.mailFrom ?? ""} placeholder="CallBot <obchod@firma.sk>" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <p className="text-xs text-slate-500">
+              {config.resendConfigured
+                ? "RESEND_API_KEY je nastavený — podklady po úspešnom hovore sa odošlú."
+                : "Bez RESEND_API_KEY na Verceli ostane e-mail v poradí a v úlohe."}
+            </p>
+            <button className="min-h-11 rounded-lg bg-primary px-4 font-semibold text-white">Uložiť nastavenia</button>
+          </form>
+
+          <form action={createUserAction} className="grid gap-4 rounded-2xl border border-border bg-white p-6">
+            <h2 className="font-semibold">Účty</h2>
+            {params.ucet === "ok" ? <p className="text-sm text-emerald-700">Účet je vytvorený.</p> : null}
+            {params.ucet === "chyba" ? <p className="text-sm text-destructive">E-mail, meno a heslo (10+ znakov) sú povinné.</p> : null}
+            <ul className="text-sm text-slate-600">
+              {users.map((user) => (
+                <li key={user.id}>
+                  {user.name} · {user.email} · {user.role === "ADMIN" ? "správca" : "agent"}
+                </li>
+              ))}
+            </ul>
+            <label className="text-sm font-medium">
+              Meno
+              <input name="name" required className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              E-mail
+              <input name="email" type="email" required className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              Dočasné heslo
+              <input name="password" type="password" required minLength={10} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              Rola
+              <select name="role" defaultValue="AGENT" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3">
+                <option value="AGENT">Agent</option>
+                <option value="ADMIN">Správca</option>
+              </select>
+            </label>
+            <button className="min-h-11 rounded-lg border border-border px-4 font-semibold">Pridať účet</button>
+          </form>
+        </>
+      ) : (
+        <p className="text-sm text-slate-500">Kľúče Twilio a OpenAI vie meniť len správca.</p>
+      )}
     </div>
   );
 }

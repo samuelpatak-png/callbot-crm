@@ -1,5 +1,6 @@
 import type { CallPlaybook, Campaign, Contact } from "@prisma/client";
 import { prisma } from "./prisma";
+import { getRuntimeConfig } from "./settings";
 
 export type PlaybookObjection = {
   objection: string;
@@ -173,14 +174,7 @@ export async function buildCallBriefing(opts: {
   contact?: Contact | null;
   campaign?: Pick<Campaign, "name" | "scriptPrompt" | "description"> | null;
 }) {
-  const [playbook, settings] = await Promise.all([
-    ensurePlaybook(),
-    prisma.appSettings.upsert({
-      where: { id: "default" },
-      update: {},
-      create: { id: "default" },
-    }),
-  ]);
+  const [playbook, settings] = await Promise.all([ensurePlaybook(), getRuntimeConfig()]);
   const contact = opts.contact ? await loadContactBrief(opts.contact) : null;
   const instructions = compileAgentInstructions({
     playbook,

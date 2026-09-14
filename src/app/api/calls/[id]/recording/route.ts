@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { getRuntimeConfig } from "@/lib/settings";
 
 export async function GET(
   _request: Request,
@@ -25,11 +26,11 @@ export async function GET(
 
   const remote = call.recordingUrl?.startsWith("http") ? call.recordingUrl : null;
   if (remote) {
-    const settings = await prisma.appSettings.findUnique({ where: { id: "default" } });
+    const config = await getRuntimeConfig();
     const headers: HeadersInit = {};
-    if (settings?.twilioAccountSid && settings.twilioAuthToken && remote.includes("twilio.com")) {
+    if (config.twilioAccountSid && config.twilioAuthToken && remote.includes("twilio.com")) {
       headers.Authorization = `Basic ${Buffer.from(
-        `${settings.twilioAccountSid}:${settings.twilioAuthToken}`,
+        `${config.twilioAccountSid}:${config.twilioAuthToken}`,
       ).toString("base64")}`;
     }
     const audio = await fetch(remote, { headers });
@@ -45,12 +46,12 @@ export async function GET(
   }
 
   const transcript = call.transcript?.trim();
-  const settings = await prisma.appSettings.findUnique({ where: { id: "default" } });
-  if (transcript && settings?.openaiApiKey) {
+  const config = await getRuntimeConfig();
+  if (transcript && config.openaiApiKey) {
     const speech = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${settings.openaiApiKey}`,
+        Authorization: `Bearer ${config.openaiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

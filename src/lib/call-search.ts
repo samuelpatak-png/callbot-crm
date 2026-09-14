@@ -15,6 +15,8 @@ export type CallHistoryFilters = {
   casOd: string;
   casDo: string;
   vysledok: "" | "uspech" | "neuspech" | "prebieha";
+  kampan: string;
+  strana: number;
 };
 
 export type CallHistoryStats = {
@@ -72,8 +74,22 @@ export function bratislavaToUtc(date: string, time: string) {
   return new Date(naive - tzOffsetMs(new Date(naive)));
 }
 
+export function bratislavaDayRange(now = new Date()) {
+  const date = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const gte = bratislavaToUtc(date, "00:00");
+  const lte = bratislavaToUtc(date, "23:59");
+  lte.setUTCSeconds(59, 999);
+  return { date, gte, lte };
+}
+
 export function parseCallHistoryFilters(params: Record<string, string | string[] | undefined>): CallHistoryFilters {
   const vysledok = firstParam(params.vysledok);
+  const strana = Math.max(1, Number(firstParam(params.strana) || "1") || 1);
   return {
     meno: firstParam(params.meno),
     cislo: firstParam(params.cislo),
@@ -83,6 +99,8 @@ export function parseCallHistoryFilters(params: Record<string, string | string[]
     casOd: validTime(firstParam(params.casOd)),
     casDo: validTime(firstParam(params.casDo)),
     vysledok: vysledok === "uspech" || vysledok === "neuspech" || vysledok === "prebieha" ? vysledok : "",
+    kampan: firstParam(params.kampan),
+    strana,
   };
 }
 
@@ -95,7 +113,8 @@ export function callHistoryHasFilters(filters: CallHistoryFilters) {
       filters.do ||
       filters.casOd ||
       filters.casDo ||
-      filters.vysledok,
+      filters.vysledok ||
+      filters.kampan,
   );
 }
 
@@ -113,6 +132,7 @@ export async function callHistoryWhere(filters: CallHistoryFilters): Promise<Pri
   if (filters.vysledok === "uspech") where.resultKind = CallResultKind.SUCCESS;
   if (filters.vysledok === "neuspech") where.resultKind = CallResultKind.FAILURE;
   if (filters.vysledok === "prebieha") where.resultKind = CallResultKind.PENDING;
+  if (filters.kampan) where.campaignId = filters.kampan;
 
   const contactAnd: Prisma.ContactWhereInput[] = [];
   if (filters.meno) {
@@ -199,4 +219,62 @@ export async function callHistoryStats(where: Prisma.CallWhereInput): Promise<Ca
   }
   stats.avgDurationSec = durationWeight ? durationSum / durationWeight : 0;
   return stats;
+}
+
+export const CALL_PAGE_SIZE = 40;
+
+export function callHistoryQuery(filters: CallHistoryFilters) {
+  const params = new URLSearchParams();
+  if (filters.meno) params.set("meno", filters.meno);
+  if (filters.cislo) params.set("cislo", filters.cislo);
+  if (filters.mail) params.set("mail", filters.mail);
+  if (filters.od) params.set("od", filters.od);
+  if (filters.do) params.set("do", filters.do);
+  if (filters.casOd) params.set("casOd", filters.casOd);
+  if (filters.casDo) params.set("casDo", filters.casDo);
+  if (filters.vysledok) params.set("vysledok", filters.vysledok);
+  if (filters.kampan) params.set("kampan", filters.kampan);
+  return params;
+}
+
+export async function callHistoryByCampaign(where: Prisma.CallWhereInput) {
+  const grouped = await prisma.call.groupBy({
+    by: ["campaignId"],
+    where,
+    _count: { _all: true },
+  });
+  const ids = grouped.map((row) => row.campaignId).filter((id): id is string => Boolean(id));
+  const campaigns = ids.length
+    ? await prisma.campaign.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+    : [];
+  const names = Object.fromEntries(campaigns.map((item) => [item.id, item.name]));
+  return grouped
+    .map((row) => ({
+      id: row.campaignId,
+      name: row.campaignId ? names[row.campaignId] || "Kampaň" : "Bez kampane",
+      total: row._count._all,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+export async function callHistoryTrend(days = 7) {
+  const start = new Date();
+  start.setUTCDate(start.getUTCDate() - days);
+  const rows = await prisma.$queryRaw<{ day: Date; total: number; success: number; failure: number }[]>`
+    SELECT
+      (("startedAt" AT TIME ZONE 'Europe/Bratislava')::date) AS day,
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE "resultKind" = 'SUCCESS')::int AS success,
+      COUNT(*) FILTER (WHERE "resultKind" = 'FAILURE')::int AS failure
+    FROM "Call"
+    WHERE "startedAt" >= ${start}
+    GROUP BY 1
+    ORDER BY 1
+  `;
+  return rows.map((row) => ({
+    day: row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10),
+    total: Number(row.total),
+    success: Number(row.success),
+    failure: Number(row.failure),
+  }));
 }

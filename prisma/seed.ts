@@ -16,6 +16,8 @@ async function main() {
       email,
       name,
       passwordHash: await bcrypt.hash(password, 12),
+      role: "ADMIN",
+      mustChangePassword: password === "CallBot2026!",
     },
   });
 
@@ -146,7 +148,7 @@ async function main() {
     },
   });
 
-  console.log(`Seed hotový. Prihlásenie: ${email} / ${password}`);
+  console.log(`Seed hotový. Prihlásenie: ${email}. Heslo je INITIAL_ADMIN_PASSWORD.`);
 }
 
 main()

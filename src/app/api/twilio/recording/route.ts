@@ -1,24 +1,21 @@
 import { NextResponse } from "next/server";
 import { ingestTwilioRecording } from "@/lib/twilio-ingest";
+import { assertTwilioSignature, parseTwilioForm, twilioUnauthorized } from "@/lib/twilio-signature";
 
 export const maxDuration = 30;
 
-async function payload(request: Request) {
-  if (request.method === "POST") {
-    try {
-      return await request.formData();
-    } catch {
-      return new FormData();
-    }
+async function handle(request: Request) {
+  const params = await parseTwilioForm(request);
+  try {
+    await assertTwilioSignature(request, params);
+  } catch {
+    return twilioUnauthorized();
   }
   const form = new FormData();
   new URL(request.url).searchParams.forEach((value, key) => form.append(key, value));
-  return form;
-}
-
-async function handle(request: Request) {
+  Object.entries(params).forEach(([key, value]) => form.set(key, value));
   const callId = new URL(request.url).searchParams.get("callId");
-  const result = await ingestTwilioRecording(await payload(request), callId);
+  const result = await ingestTwilioRecording(form, callId);
   return NextResponse.json(result);
 }
 

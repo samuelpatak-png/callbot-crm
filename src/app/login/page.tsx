@@ -57,7 +57,7 @@ export default async function LoginPage({
           </button>
         </form>
         <p className="mt-5 text-xs text-slate-500">
-          Predvolený účet po nasadení: admin@callbot.local. Heslo nastavíš v premenných Vercelu.
+          Heslo nastavíš v premennej INITIAL_ADMIN_PASSWORD na Verceli a po prvom prihlásení ho zmeň v Nastaveniach.
         </p>
         <p className="mt-3 text-xs text-slate-400">
           <Link href="/" className="underline-offset-2 hover:underline">

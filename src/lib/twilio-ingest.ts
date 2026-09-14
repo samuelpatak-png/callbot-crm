@@ -3,6 +3,7 @@ import { prisma } from "./prisma";
 import { applyCallDebrief } from "./call-debrief";
 import { finalizeCampaignMember } from "./dialer";
 import { outcomeFromCallStatus, transcribeCallAudio, twilioCallStatus } from "./transcribe";
+import { getRuntimeConfig } from "./settings";
 import type { PlaceCallResult } from "./voice";
 
 function first(form: FormData, key: string) {
@@ -107,9 +108,9 @@ export async function ingestTwilioRecording(form: FormData, callId: string | nul
   });
 
   after(async () => {
-    const settings = await prisma.appSettings.findUnique({ where: { id: "default" } });
-    const sid = settings?.twilioAccountSid;
-    const token = settings?.twilioAuthToken;
+    const config = await getRuntimeConfig();
+    const sid = config.twilioAccountSid;
+    const token = config.twilioAuthToken;
     let transcript = call.transcript || "";
     if (sid && token) {
       const audio = await fetch(recordingUrl, {
@@ -117,11 +118,11 @@ export async function ingestTwilioRecording(form: FormData, callId: string | nul
           Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
         },
       });
-      if (audio.ok && settings?.openaiApiKey) {
+      if (audio.ok && config.openaiApiKey) {
         try {
           transcript = await transcribeCallAudio({
             audio: await audio.arrayBuffer(),
-            apiKey: settings.openaiApiKey,
+            apiKey: config.openaiApiKey,
           });
         } catch {
           transcript = call.transcript || "";
