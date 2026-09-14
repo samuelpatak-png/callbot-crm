@@ -224,6 +224,7 @@ export async function placeCallAction(formData: FormData) {
     from: settings.twilioFromNumber,
     contactId,
     contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+    contactEmail: contact.email,
     callId: call.id,
     instructions: briefing.instructions,
     twilioAccountSid: settings.twilioAccountSid,
@@ -238,12 +239,16 @@ export async function placeCallAction(formData: FormData) {
     transcript: result.transcript,
     agentId: session.id,
     realtimeLoaded: realtime.loaded,
+    recordingUrl: result.recordingUrl,
+    recordingSid: result.recordingSid,
   });
 
   revalidatePath(`/kontakty/${contactId}`);
   revalidatePath("/kontakty");
   revalidatePath("/hovory");
   revalidatePath("/ulohy");
+  revalidatePath("/pipeline");
+  revalidatePath("/");
 }
 
 export async function createCampaignAction(formData: FormData) {

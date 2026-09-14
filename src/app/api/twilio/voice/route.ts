@@ -28,6 +28,8 @@ export async function POST(request: Request) {
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say language="sk-SK" voice="Polly.Mia">Tento hovor nahrávame pre automatický zápis do CRM.</Say>
+  <Pause length="1"/>
   <Say language="sk-SK" voice="Polly.Mia">${xmlEscape(opening.slice(0, 500))}</Say>
   <Pause length="1"/>
   <Say language="sk-SK" voice="Polly.Mia">${

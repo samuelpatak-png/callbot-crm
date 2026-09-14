@@ -15,6 +15,7 @@ export type ContactBrief = {
   source?: string | null;
   websiteUrl?: string | null;
   companyName?: string | null;
+  email?: string | null;
   notes: string[];
 };
 
@@ -112,6 +113,9 @@ export function compileAgentInstructions(opts: {
       opts.contact.title ? `Pozícia: ${opts.contact.title}` : "",
       opts.contact.city ? `Mesto: ${opts.contact.city}` : "",
       opts.contact.phone ? `Telefón: ${opts.contact.phone}` : "",
+      opts.contact.email
+        ? `E-mail v CRM: ${opts.contact.email}`
+        : "E-mail v CRM: zatiaľ nemáme. Ak ho dajú, zopakuj ho nahlas.",
       opts.contact.websiteUrl ? `Web: ${opts.contact.websiteUrl}` : "",
       opts.contact.source ? `Zdroj v CRM: ${opts.contact.source}` : "",
     ].filter(Boolean);
@@ -123,12 +127,14 @@ export function compileAgentInstructions(opts: {
     parts.push(section("Komu voláš", contactLines.join("\n")));
   }
 
-  parts.push(
+    parts.push(
     section("Nerob", playbook.neverDo),
     `## Pravidlá hovoru
 - Najprv sa predstav, potom počúvaj.
 - Jedna myšlienka naraz, krátke vety.
 - Keď je záujem, ťahaj k cieľu hovoru.
+- Ak je záujem alebo chce podklady, vždy si vypýtaj e-mail a zopakuj ho nahlas, aby sme ho vedeli zapísať.
+- Pred ukončením zhrň: záujem áno/nie, ďalší krok, e-mail.
 - Keď je to nie, poďakuj a ukonči. Nepridávaj nátlak.
 - Ak ťa požiadajú, aby si ich už nevolal, sľúb to a ukonči.`,
   );
@@ -158,6 +164,7 @@ export async function loadContactBrief(contact: Contact): Promise<ContactBrief> 
     source: contact.source,
     websiteUrl: contact.websiteUrl,
     companyName: company?.name ?? null,
+    email: contact.email,
     notes: notes.map((note) => note.body.replace(/\s+/g, " ").trim().slice(0, 280)),
   };
 }

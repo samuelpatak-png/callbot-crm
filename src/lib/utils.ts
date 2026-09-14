@@ -124,6 +124,18 @@ export function callOutcomeLabel(outcome?: string | null) {
   return labels[outcome] ?? outcome;
 }
 
+export const callResultKindLabel = {
+  PENDING: "Prebieha",
+  SUCCESS: "Úspešný",
+  FAILURE: "Neúspešný",
+} as const;
+
+export const callResultKindTone = {
+  PENDING: "bg-amber-100 text-amber-800",
+  SUCCESS: "bg-emerald-100 text-emerald-800",
+  FAILURE: "bg-rose-100 text-rose-800",
+} as const;
+
 export function isCallable(status: ContactStatus, doNotCall: boolean) {
   if (doNotCall || status === "DNC") return false;
   return status !== "CALLING";

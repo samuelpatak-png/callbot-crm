@@ -1,11 +1,15 @@
-import type { ContactStatus, Prisma } from "@prisma/client";
+import type { CallResultKind, ContactStatus, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import type { PlaceCallResult } from "./voice";
+import { classifyCallResult, extractEmailFromTranscript, normalizeEmail } from "./call-capture";
 
 export type CallDebrief = {
   summary: string;
   outcome: string;
   contactStatus: ContactStatus;
+  resultKind: CallResultKind;
+  capturedEmail: string | null;
+  capturedCompany: string | null;
   doNotCall: boolean;
   followUpAt: Date | null;
   note: string;
@@ -22,6 +26,7 @@ const STATUSES = new Set<ContactStatus>([
   "CALLBACK",
   "INTERESTED",
   "NOT_INTERESTED",
+  "CONVERTED",
   "DNC",
   "FAILED",
 ]);
@@ -30,8 +35,9 @@ function hoursFromNow(hours: number) {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
-export function heuristicDebrief(result: PlaceCallResult, contactName: string): CallDebrief {
+export function heuristicDebrief(result: PlaceCallResult, contactName: string, transcript = ""): CallDebrief {
   const name = contactName.trim() || "kontakt";
+  const capturedEmail = extractEmailFromTranscript(transcript || result.transcript || "");
   const base = {
     doNotCall: false,
     followUpAt: null as Date | null,
@@ -40,16 +46,26 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string): 
     objections: [] as string[],
     source: "heuristic" as const,
     outcome: result.outcome,
+    capturedEmail,
+    capturedCompany: null as string | null,
+    resultKind: "FAILURE" as CallResultKind,
   };
 
   if (result.outcome === "interested") {
     return {
       ...base,
-      summary: `${name} prejavil záujem. Treba poslať ponuku alebo dohodnúť termín.`,
+      summary: capturedEmail
+        ? `${name} prejavil záujem a dal e-mail ${capturedEmail}.`
+        : `${name} prejavil záujem. Treba poslať ponuku alebo dohodnúť termín.`,
       contactStatus: "INTERESTED",
+      resultKind: "SUCCESS",
       followUpAt: hoursFromNow(24),
-      note: `Po hovore: záujem. ${result.summary}`,
-      taskTitle: `Dohodnúť termín / poslať ponuku — ${name}`,
+      note: capturedEmail
+        ? `Po hovore: záujem. E-mail z hovoru: ${capturedEmail}. ${result.summary}`
+        : `Po hovore: záujem. ${result.summary}`,
+      taskTitle: capturedEmail
+        ? `Poslať podklady na ${capturedEmail} — ${name}`
+        : `Dohodnúť termín / poslať ponuku — ${name}`,
       taskDueAt: hoursFromNow(24),
     };
   }
@@ -78,7 +94,7 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string): 
   if (result.status === "BUSY" || result.outcome === "busy") {
     return {
       ...base,
-      summary: `${name} mal obsadené. Spätné volanie.`,
+      summary: `${name} mal obsadené. Naplánovať ďalší pokus.`,
       contactStatus: "CALLBACK",
       followUpAt: hoursFromNow(4),
       note: `Po hovore: obsadené. ${result.summary}`,
@@ -106,12 +122,22 @@ export function heuristicDebrief(result: PlaceCallResult, contactName: string): 
       note: dnc ? `Po hovore: nevolať. ${result.summary}` : `Po hovore: bez záujmu. ${result.summary}`,
     };
   }
-  return {
+
+  const connected: CallDebrief = {
     ...base,
-    summary: `Hovor s ${name} prebehol. ${result.summary}`,
-    contactStatus: "CONNECTED",
-    note: `Po hovore: spojený. ${result.summary}`,
+    summary: capturedEmail
+      ? `Hovor s ${name} prebehol. Má poslať podklady na ${capturedEmail}.`
+      : `Hovor s ${name} prebehol. ${result.summary}`,
+    contactStatus: capturedEmail ? "CALLBACK" : "CONNECTED",
+    resultKind: capturedEmail ? "SUCCESS" : "FAILURE",
+    followUpAt: capturedEmail ? hoursFromNow(24) : null,
+    note: capturedEmail
+      ? `Po hovore: spojený, e-mail ${capturedEmail}. ${result.summary}`
+      : `Po hovore: spojený. ${result.summary}`,
+    taskTitle: capturedEmail ? `Poslať podklady na ${capturedEmail} — ${name}` : null,
+    taskDueAt: capturedEmail ? hoursFromNow(24) : null,
   };
+  return connected;
 }
 
 function parseIsoDate(value: unknown) {
@@ -132,7 +158,7 @@ export async function analyzeCallTranscript(opts: {
   contactName: string;
   apiKey: string | null;
 }): Promise<CallDebrief> {
-  const fallback = heuristicDebrief(opts.result, opts.contactName);
+  const fallback = heuristicDebrief(opts.result, opts.contactName, opts.transcript);
   if (!opts.apiKey || opts.result.status === "RINGING") return fallback;
   if (!opts.transcript.trim() || opts.transcript.startsWith("[stub] Dial")) return fallback;
 
@@ -156,6 +182,9 @@ export async function analyzeCallTranscript(opts: {
   "summary": "2-4 vety po slovensky, len fakty z prepisu",
   "outcome": "interested|callback|not_interested|voicemail|no_answer|dnc|connected|busy|failed",
   "contactStatus": "INTERESTED|CALLBACK|NOT_INTERESTED|VOICEMAIL|NO_ANSWER|DNC|CONNECTED|FAILED",
+  "resultKind": "SUCCESS|FAILURE",
+  "capturedEmail": "e-mail z hovoru alebo null",
+  "capturedCompany": "firma z hovoru alebo null",
   "doNotCall": false,
   "followUpAt": "ISO-8601 alebo null",
   "note": "poznámka do karty kontaktu po slovensky",
@@ -163,7 +192,9 @@ export async function analyzeCallTranscript(opts: {
   "taskDueAt": "ISO-8601 alebo null",
   "objections": ["krátke námietky z hovoru"]
 }
-Nevymýšľaj ceny ani sľuby, ktoré v prepise nie sú. Ak povedal nevolajte, doNotCall=true a contactStatus=DNC.`,
+SUCCESS = záujem, termín, spätné volanie, e-mail na podklady, deal sa posunul.
+FAILURE = nezdvihol, záznamník, bez záujmu, DNC, zlyhanie, hovor bez ďalšieho kroku.
+Nevymýšľaj e-mail, ceny ani sľuby, ktoré v prepise nie sú. Ak povedal nevolajte, doNotCall=true a contactStatus=DNC.`,
           },
           {
             role: "user",
@@ -185,12 +216,35 @@ Nevymýšľaj ceny ani sľuby, ktoré v prepise nie sú. Ak povedal nevolajte, d
     const outcome = String(parsed.outcome || fallback.outcome);
     const contactStatus = asStatus(parsed.contactStatus, fallback.contactStatus);
     const doNotCall = Boolean(parsed.doNotCall) || contactStatus === "DNC";
-    const followUpAt = parseIsoDate(parsed.followUpAt) ?? (contactStatus === "CALLBACK" || contactStatus === "NO_ANSWER" ? hoursFromNow(24) : fallback.followUpAt);
-    const taskTitle = typeof parsed.taskTitle === "string" && parsed.taskTitle.trim() ? parsed.taskTitle.trim().slice(0, 180) : fallback.taskTitle;
+    const capturedEmail =
+      normalizeEmail(typeof parsed.capturedEmail === "string" ? parsed.capturedEmail : null) ??
+      fallback.capturedEmail;
+    const followUpAt =
+      parseIsoDate(parsed.followUpAt) ??
+      (contactStatus === "CALLBACK" || contactStatus === "NO_ANSWER" || capturedEmail
+        ? hoursFromNow(24)
+        : fallback.followUpAt);
+    const taskTitle =
+      typeof parsed.taskTitle === "string" && parsed.taskTitle.trim()
+        ? parsed.taskTitle.trim().slice(0, 180)
+        : capturedEmail && !fallback.taskTitle
+          ? `Poslať podklady na ${capturedEmail}`
+          : fallback.taskTitle;
+    const resultKindRaw = String(parsed.resultKind || "").toUpperCase();
+    const resultKind: CallResultKind =
+      resultKindRaw === "SUCCESS" || resultKindRaw === "FAILURE"
+        ? resultKindRaw
+        : classifyCallResult({ outcome, contactStatus, capturedEmail });
     return {
       summary: String(parsed.summary || fallback.summary).slice(0, 600),
       outcome,
       contactStatus: doNotCall ? "DNC" : contactStatus,
+      resultKind: doNotCall ? "FAILURE" : resultKind,
+      capturedEmail,
+      capturedCompany:
+        typeof parsed.capturedCompany === "string" && parsed.capturedCompany.trim()
+          ? parsed.capturedCompany.trim().slice(0, 120)
+          : fallback.capturedCompany,
       doNotCall,
       followUpAt,
       note: String(parsed.note || fallback.note).slice(0, 2000),
@@ -215,7 +269,13 @@ export async function applyCallDebrief(opts: {
   agentId?: string | null;
   campaignId?: string | null;
   realtimeLoaded?: boolean;
+  recordingUrl?: string | null;
+  recordingSid?: string | null;
 }) {
+  const existing = await prisma.call.findUnique({ where: { id: opts.callId } });
+  const recordingUrl = opts.recordingUrl ?? opts.result.recordingUrl ?? existing?.recordingUrl ?? null;
+  const recordingSid = opts.recordingSid ?? opts.result.recordingSid ?? existing?.recordingSid ?? null;
+
   if (opts.result.status === "RINGING") {
     await prisma.call.update({
       where: { id: opts.callId },
@@ -227,14 +287,18 @@ export async function applyCallDebrief(opts: {
         providerCallSid: opts.result.providerCallSid,
         transcript: opts.transcript ?? opts.result.transcript,
         summary: opts.result.summary,
+        recordingUrl,
+        recordingSid,
+        resultKind: "PENDING",
       },
     });
     return null;
   }
 
+  const transcript = opts.transcript || opts.result.transcript || existing?.transcript || "";
   const settings = await prisma.appSettings.findUnique({ where: { id: "default" } });
   const debrief = await analyzeCallTranscript({
-    transcript: opts.transcript || opts.result.transcript || "",
+    transcript,
     result: opts.result,
     contactName: opts.contactName,
     apiKey: settings?.openaiApiKey ?? null,
@@ -243,6 +307,10 @@ export async function applyCallDebrief(opts: {
   const summary = opts.realtimeLoaded
     ? `${debrief.summary} ChatGPT Realtime mal načítaný skript.`
     : debrief.summary;
+  const already = Boolean(existing?.debriefedAt);
+  const emailIsNew = Boolean(
+    debrief.capturedEmail && debrief.capturedEmail !== existing?.capturedEmail,
+  );
 
   await prisma.$transaction(async (tx) => {
     await tx.call.update({
@@ -250,16 +318,24 @@ export async function applyCallDebrief(opts: {
       data: {
         status: opts.result.status,
         outcome: debrief.outcome,
-        durationSec: opts.result.durationSec,
-        endedAt: new Date(),
+        durationSec: opts.result.durationSec || existing?.durationSec || 0,
+        endedAt: existing?.endedAt ?? new Date(),
         provider: opts.result.provider,
-        providerCallSid: opts.result.providerCallSid,
-        transcript: opts.transcript ?? opts.result.transcript,
+        providerCallSid: opts.result.providerCallSid || existing?.providerCallSid,
+        transcript,
         summary,
+        recordingUrl,
+        recordingSid,
+        resultKind: debrief.resultKind,
+        capturedEmail: debrief.capturedEmail,
+        debriefedAt: new Date(),
         debrief: {
           source: debrief.source,
           objections: debrief.objections,
           contactStatus: debrief.contactStatus,
+          resultKind: debrief.resultKind,
+          capturedEmail: debrief.capturedEmail,
+          capturedCompany: debrief.capturedCompany,
           taskTitle: debrief.taskTitle,
         } satisfies Prisma.InputJsonValue,
       },
@@ -269,46 +345,76 @@ export async function applyCallDebrief(opts: {
       where: { id: opts.contactId },
       data: {
         status: debrief.contactStatus,
+        email: debrief.capturedEmail ?? undefined,
         doNotCall: debrief.doNotCall ? true : undefined,
         lastCalledAt: new Date(),
-        nextFollowUpAt: debrief.followUpAt,
+        nextFollowUpAt: debrief.followUpAt ?? undefined,
       },
     });
 
-    await tx.note.create({
-      data: {
-        contactId: opts.contactId,
-        authorId: opts.agentId ?? undefined,
-        body: debrief.note,
-      },
-    });
-
-    if (debrief.taskTitle) {
-      await tx.task.create({
+    if (!already) {
+      await tx.note.create({
         data: {
-          title: debrief.taskTitle,
-          description: debrief.summary,
-          dueAt: debrief.taskDueAt,
           contactId: opts.contactId,
-          ownerId: opts.agentId ?? undefined,
+          authorId: opts.agentId ?? undefined,
+          body: debrief.note,
+        },
+      });
+      if (debrief.taskTitle) {
+        await tx.task.create({
+          data: {
+            title: debrief.taskTitle,
+            description: debrief.summary,
+            dueAt: debrief.taskDueAt,
+            contactId: opts.contactId,
+            ownerId: opts.agentId ?? undefined,
+          },
+        });
+      }
+      await tx.activity.create({
+        data: {
+          type: "CALL",
+          contactId: opts.contactId,
+          userId: opts.agentId ?? undefined,
+          message: `${debrief.resultKind === "SUCCESS" ? "Úspešný" : "Neúspešný"} hovor: ${debrief.outcome}${
+            debrief.capturedEmail ? ` · ${debrief.capturedEmail}` : ""
+          }`,
+          payload: {
+            callId: opts.callId,
+            campaignId: opts.campaignId,
+            sid: opts.result.providerCallSid,
+            resultKind: debrief.resultKind,
+            capturedEmail: debrief.capturedEmail,
+            objections: debrief.objections,
+          },
+        },
+      });
+    } else if (emailIsNew && debrief.capturedEmail) {
+      await tx.note.create({
+        data: {
+          contactId: opts.contactId,
+          body: `E-mail z nahrávky hovoru: ${debrief.capturedEmail}`,
         },
       });
     }
 
-    await tx.activity.create({
-      data: {
-        type: "CALL",
-        contactId: opts.contactId,
-        userId: opts.agentId ?? undefined,
-        message: `Hovor: ${debrief.outcome} · ${debrief.source === "openai" ? "prepis z ChatGPT" : "automatický zápis"}`,
-        payload: {
-          callId: opts.callId,
-          campaignId: opts.campaignId,
-          sid: opts.result.providerCallSid,
-          objections: debrief.objections,
-        },
-      },
-    });
+    if (debrief.resultKind === "SUCCESS") {
+      const openDeal = await tx.deal.findFirst({
+        where: { contactId: opts.contactId, stage: { not: "LOST" } },
+        select: { id: true },
+      });
+      if (!openDeal) {
+        await tx.deal.create({
+          data: {
+            title: debrief.capturedEmail
+              ? `Ponuka pre ${opts.contactName}`
+              : `Hovor: ${opts.contactName}`,
+            stage: debrief.contactStatus === "INTERESTED" ? "QUALIFIED" : "LEAD",
+            contactId: opts.contactId,
+          },
+        });
+      }
+    }
   });
 
   return debrief;

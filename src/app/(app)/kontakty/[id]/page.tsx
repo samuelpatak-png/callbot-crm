@@ -7,7 +7,8 @@ import {
   placeCallAction,
   updateContactAction,
 } from "@/lib/actions";
-import { contactStatusLabel, contactStatusTone, callOutcomeLabel, formatDateTime } from "@/lib/utils";
+import { contactStatusLabel, contactStatusTone, callOutcomeLabel, callResultKindLabel, callResultKindTone, formatDateTime } from "@/lib/utils";
+import { RecordingPlayer } from "@/components/recording-player";
 
 export default async function ContactDetailPage({
   params,
@@ -47,6 +48,13 @@ export default async function ContactDetailPage({
               <p className="text-sm text-slate-500">
                 {contact.title || "Bez pozície"} · {contact.company?.name || "Bez firmy"} · {contact.city || "—"}
               </p>
+              {contact.email ? (
+                <a href={`mailto:${contact.email}`} className="mt-1 inline-block text-sm text-primary">
+                  {contact.email}
+                </a>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">E-mail ešte nie je z hovoru</p>
+              )}
               {contact.websiteUrl ? (
                 <a href={contact.websiteUrl} className="mt-1 inline-block text-sm text-primary" target="_blank" rel="noreferrer">
                   {contact.websiteUrl}
@@ -138,10 +146,24 @@ export default async function ContactDetailPage({
               {contact.calls.map((call) => (
                 <li key={call.id} className="border-l-2 border-slate-200 pl-3 text-sm">
                   <p className="font-medium">
+                    <span className={`mr-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${callResultKindTone[call.resultKind]}`}>
+                      {callResultKindLabel[call.resultKind]}
+                    </span>
                     {callOutcomeLabel(call.outcome)} · {call.durationSec}s
                   </p>
                   <p className="text-xs text-slate-500">{formatDateTime(call.startedAt)}</p>
+                  {call.capturedEmail ? (
+                    <p className="mt-1">
+                      E-mail z hovoru:{" "}
+                      <a className="text-primary" href={`mailto:${call.capturedEmail}`}>
+                        {call.capturedEmail}
+                      </a>
+                    </p>
+                  ) : null}
                   {call.summary ? <p className="mt-1 text-slate-700">{call.summary}</p> : null}
+                  {call.recordingUrl || call.transcript ? (
+                    <RecordingPlayer callId={call.id} hasTranscript={Boolean(call.transcript)} />
+                  ) : null}
                   {call.transcript ? (
                     <details className="mt-2">
                       <summary className="cursor-pointer text-xs font-medium text-primary">Prepis</summary>

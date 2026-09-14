@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PauseCircle, PlayCircle, CalendarClock } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { campaignStatusLabel, contactStatusLabel, formatDateTime, formatMoney, harvestStatusLabel } from "@/lib/utils";
+import { campaignStatusLabel, contactStatusLabel, callResultKindLabel, formatDateTime, formatMoney, harvestStatusLabel } from "@/lib/utils";
 import { pauseCampaignAction, resumeCampaignAction, startCampaignAction, startHarvestAction } from "@/lib/actions";
 
 export default async function DashboardPage() {
@@ -34,6 +34,12 @@ export default async function DashboardPage() {
   const connected = await prisma.call.count({
     where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: "COMPLETED" },
   });
+  const successToday = await prisma.call.count({
+    where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, resultKind: "SUCCESS" },
+  });
+  const failureToday = await prisma.call.count({
+    where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, resultKind: "FAILURE" },
+  });
 
   return (
     <div className="space-y-6">
@@ -55,11 +61,11 @@ export default async function DashboardPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Kontakty" value={String(contacts)} hint="telefónne čísla v databáze" />
         <Stat label="Hovory dnes" value={String(callsToday)} hint={`${connected} spojených`} />
-        <Stat label="Otvorené úlohy" value={String(openTasks)} hint="termíny a follow-up" />
+        <Stat label="Úspešné dnes" value={String(successToday)} hint={`${failureToday} neúspešných`} />
         <Stat
           label="Pipeline"
           value={formatMoney(deals._sum.value ?? 0)}
-          hint="hodnota otvorených dealov"
+          hint={`${openTasks} otvorených úloh`}
         />
       </section>
 
@@ -177,7 +183,7 @@ export default async function DashboardPage() {
                     <p className="text-xs text-slate-500">{contactStatusLabel[call.contact.status]}</p>
                   </td>
                   <td className="number-mono py-3">{call.contact.phone}</td>
-                  <td className="py-3">{call.outcome || call.status}</td>
+                  <td className="py-3">{callResultKindLabel[call.resultKind]} · {call.outcome || call.status}</td>
                   <td className="py-3 text-slate-500">{formatDateTime(call.startedAt)}</td>
                 </tr>
               ))}

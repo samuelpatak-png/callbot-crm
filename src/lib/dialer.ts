@@ -112,6 +112,7 @@ export async function tickDialer() {
     from: settings.twilioFromNumber,
     contactId: member.contactId,
     contactName: `${member.contact.firstName} ${member.contact.lastName}`.trim(),
+    contactEmail: member.contact.email,
     campaignId: campaign.id,
     callId: call.id,
     scriptPrompt: campaign.scriptPrompt,
@@ -120,7 +121,20 @@ export async function tickDialer() {
     twilioAuthToken: settings.twilioAuthToken,
   });
 
-  const retry = member.attempts + 1 < campaign.retryAttempts && ["NO_ANSWER", "BUSY", "FAILED"].includes(result.status);
+  if (result.status === "RINGING") {
+    await applyCallDebrief({
+      callId: call.id,
+      contactId: member.contactId,
+      contactName: `${member.contact.firstName} ${member.contact.lastName}`.trim(),
+      result,
+      transcript: result.transcript,
+      campaignId: campaign.id,
+      realtimeLoaded: realtime.loaded,
+      recordingUrl: result.recordingUrl,
+      recordingSid: result.recordingSid,
+    });
+    return { ok: true, processed: 1, campaignId: campaign.id, waiting: "twilio" };
+  }
 
   await applyCallDebrief({
     callId: call.id,
@@ -130,26 +144,52 @@ export async function tickDialer() {
     transcript: result.transcript,
     campaignId: campaign.id,
     realtimeLoaded: realtime.loaded,
+    recordingUrl: result.recordingUrl,
+    recordingSid: result.recordingSid,
   });
+
+  await finalizeCampaignMember({
+    campaignId: campaign.id,
+    contactId: member.contactId,
+    callStatus: result.status,
+  });
+
+  return { ok: true, processed: 1, campaignId: campaign.id };
+}
+
+export async function finalizeCampaignMember(opts: {
+  campaignId: string | null | undefined;
+  contactId: string;
+  callStatus: import("@prisma/client").CallStatus;
+}) {
+  if (!opts.campaignId) return;
+  const campaign = await prisma.campaign.findUnique({ where: { id: opts.campaignId } });
+  if (!campaign) return;
+
+  const member = await prisma.campaignMember.findUnique({
+    where: { campaignId_contactId: { campaignId: opts.campaignId, contactId: opts.contactId } },
+  });
+  if (!member || member.status === "COMPLETED" || member.status === "SKIPPED") return;
+
+  const retry =
+    member.attempts < campaign.retryAttempts && ["NO_ANSWER", "BUSY", "FAILED"].includes(opts.callStatus);
 
   await prisma.campaignMember.update({
     where: { id: member.id },
-    data: { status: retry ? "PENDING" : result.status === "FAILED" ? "FAILED" : "COMPLETED" },
+    data: { status: retry ? "PENDING" : opts.callStatus === "FAILED" ? "FAILED" : "COMPLETED" },
   });
 
   const remaining = await prisma.campaignMember.count({
     where: { campaignId: campaign.id, status: "PENDING" },
   });
-  if (remaining === 0) {
+  if (remaining === 0 && campaign.status === "RUNNING") {
     await prisma.campaign.update({
       where: { id: campaign.id },
       data: { status: "COMPLETED", completedAt: new Date() },
     });
-  } else {
+  } else if (campaign.status === "RUNNING") {
     await scheduleNextTick(campaign.delayBetweenCallsMs);
   }
-
-  return { ok: true, processed: 1, campaignId: campaign.id, remaining };
 }
 
 export async function startCampaign(id: string) {

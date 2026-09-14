@@ -14,7 +14,7 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Nastavenia</h1>
         <p className="text-sm text-slate-500">
-          Twilio a ChatGPT Live API. Skript, predstavenie a argumenty nastavíš v{" "}
+          Twilio a ChatGPT Live API. Hovory sa nahrávajú, prepis a e-mail z hovoru sa zapíšu sami. Skript, predstavenie a argumenty nastavíš v{" "}
           <Link href="/skript" className="text-primary underline-offset-2 hover:underline">
             Skripte
           </Link>

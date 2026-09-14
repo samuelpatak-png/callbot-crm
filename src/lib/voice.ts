@@ -1,10 +1,13 @@
 import type { CallStatus, VoiceProviderKind } from "@prisma/client";
+import { appUrl } from "./utils";
+import { demoSpokenEmail } from "./call-capture";
 
 export type PlaceCallInput = {
   to: string;
   from?: string | null;
   contactId: string;
   contactName?: string | null;
+  contactEmail?: string | null;
   campaignId?: string | null;
   callId?: string | null;
   scriptPrompt?: string | null;
@@ -21,6 +24,8 @@ export type PlaceCallResult = {
   durationSec: number;
   summary: string;
   transcript?: string;
+  recordingUrl?: string | null;
+  recordingSid?: string | null;
 };
 
 export interface VoiceProvider {
@@ -62,11 +67,17 @@ function openingFrom(instructions?: string | null) {
   return match?.[1]?.trim() || "Dobrý deň, volám z CallBotu. Neruším vás na dve minúty?";
 }
 
-function stubTranscript(outcome: string, name: string, instructions?: string | null) {
+function stubTranscript(
+  outcome: string,
+  name: string,
+  instructions?: string | null,
+  email?: string | null,
+) {
   const opening = openingFrom(instructions);
   const who = name || "pán / pani";
+  const mail = demoSpokenEmail(name, email);
   if (outcome === "interested") {
-    return `Agent: ${opening}\n${who}: Dobrý deň, počúvam.\nAgent: Volám, či máte chvíľu na krátku otázku k odchádzajúcim hovorom.\n${who}: Teraz áno. Znie to použiteľne, pošlite mi to ešte písomne.\nAgent: Ďakujem, dohodneme termín a pošleme podklady.`;
+    return `Agent: ${opening}\n${who}: Dobrý deň, počúvam.\nAgent: Volám, či máte chvíľu na krátku otázku k odchádzajúcim hovorom.\n${who}: Teraz áno. Znie to použiteľne, pošlite mi to na ${mail}.\nAgent: Ďakujem, na ${mail} pošleme podklady a dohodneme termín.`;
   }
   if (outcome === "no_answer") {
     return `Agent: ${opening}\n(nikto nezdvihol, hovor sa po niekoľkých zazvoneniach ukončil)`;
@@ -83,7 +94,7 @@ function stubTranscript(outcome: string, name: string, instructions?: string | n
   if (outcome === "not_interested") {
     return `Agent: ${opening}\n${who}: Ďakujem, teraz nemám záujem, ozvite sa inokedy.\nAgent: Rozumiem, ďakujem za čas.`;
   }
-  return `Agent: ${opening}\n${who}: Počúvam, povedzte stručne.\nAgent: Volám kvôli odchádzajúcim hovorom, či máte chvíľu.\n${who}: Zatiaľ sa nerozhodnem, pošlite mi to ešte písomne.\nAgent: Ďakujem, pošleme podklady.`;
+  return `Agent: ${opening}\n${who}: Počúvam, povedzte stručne.\nAgent: Volám kvôli odchádzajúcim hovorom, či máte chvíľu.\n${who}: Zatiaľ sa nerozhodnem, pošlite mi to na ${mail}.\nAgent: Ďakujem, na ${mail} pošleme podklady.`;
 }
 
 export class StubVoiceProvider implements VoiceProvider {
@@ -94,11 +105,12 @@ export class StubVoiceProvider implements VoiceProvider {
     const durationSec = randInt(picked.duration[0], picked.duration[1]);
     const sid = `stub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const name = input.contactName?.trim() || input.to;
-    const transcript = stubTranscript(picked.outcome, name, input.instructions);
+    const transcript = stubTranscript(picked.outcome, name, input.instructions, input.contactEmail);
     const summary =
       picked.outcome === "interested"
         ? `Simulovaný hovor na ${input.to}: kontakt prejavil záujem.`
         : `Simulovaný hovor na ${input.to}: výsledok ${picked.outcome}.`;
+    const recordingUrl = input.callId ? `/api/calls/${input.callId}/recording` : null;
 
     return {
       provider: "STUB",
@@ -108,6 +120,8 @@ export class StubVoiceProvider implements VoiceProvider {
       durationSec,
       summary,
       transcript,
+      recordingUrl,
+      recordingSid: recordingUrl ? `rec_${sid}` : null,
     };
   }
 }
@@ -129,16 +143,19 @@ export class TwilioVoiceProvider implements VoiceProvider {
       };
     }
 
-    const app = process.env.APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
-    const origin = app ? (app.startsWith("http") ? app : `https://${app}`) : "";
-    const twimlUrl = origin
-      ? `${origin}/api/twilio/voice${input.callId ? `?callId=${encodeURIComponent(input.callId)}` : ""}`
-      : undefined;
+    const origin = appUrl();
+    const callQs = input.callId ? `?callId=${encodeURIComponent(input.callId)}` : "";
+    const twimlUrl = `${origin}/api/twilio/voice${callQs}`;
 
     const body = new URLSearchParams({
       To: input.to,
       From: from,
-      Url: twimlUrl || "https://demo.twilio.com/docs/voice.xml",
+      Url: twimlUrl,
+      Record: "true",
+      RecordingStatusCallback: `${origin}/api/twilio/recording${callQs}`,
+      RecordingStatusCallbackEvent: "completed",
+      StatusCallback: `${origin}/api/twilio/status${callQs}`,
+      StatusCallbackEvent: "initiated ringing answered completed",
     });
 
     const response = await fetch(

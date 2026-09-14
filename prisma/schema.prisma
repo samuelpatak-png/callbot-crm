@@ -55,6 +55,12 @@ enum CallStatus {
   CANCELED
 }
 
+enum CallResultKind {
+  PENDING
+  SUCCESS
+  FAILURE
+}
+
 enum DealStage {
   LEAD
   QUALIFIED
@@ -267,10 +273,14 @@ model Call {
   providerCallSid String?
   transcript      String?
   recordingUrl    String?
+  recordingSid    String?
   summary         String?
   agentInstructions String?
   realtimeSessionId String?
   debrief           Json?
+  resultKind      CallResultKind @default(PENDING)
+  capturedEmail   String?
+  debriefedAt     DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -282,6 +292,7 @@ model Call {
   @@index([campaignId])
   @@index([status])
   @@index([startedAt])
+  @@index([resultKind])
 }
 
 model Note {
