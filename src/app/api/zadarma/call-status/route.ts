@@ -1,62 +1,97 @@
+/**
+ * Zadarma PBX event notifications — /api/zadarma/call-status
+ *
+ * Handshake: Zadarma saves the URL only if a request with `zd_echo=<token>`
+ * (GET query or POST form) gets HTTP 200 and the raw token as the body.
+ * That probe is unsigned. Do not wrap it in JSON, do not redirect, do not auth.
+ *
+ * Later events arrive as POST application/x-www-form-urlencoded plus a
+ * `Signature` header:
+ *   concat = values of payload keys sorted alphabetically, joined with no separator
+ *   signature = base64( hmac_sha1( md5(concat), ZADARMA_API_SECRET ) )
+ */
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getRuntimeConfig } from "@/lib/settings";
 import { ingestZadarmaEvent } from "@/lib/zadarma-ingest";
-import { zadarmaSignaturePayload, verifyZadarmaSignature } from "@/lib/zadarma";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-async function parseBody(request: Request) {
-  const contentType = request.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    const data = (await request.json()) as Record<string, unknown>;
-    const body: Record<string, string> = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (value == null) continue;
-      body[key] = String(value);
-    }
-    return body;
-  }
-  const form = await request.formData();
+function echoReply(value: string) {
+  return new NextResponse(value, {
+    status: 200,
+    headers: { "Content-Type": "text/plain" },
+  });
+}
+
+function parseForm(raw: string) {
   const body: Record<string, string> = {};
-  form.forEach((value, key) => {
-    if (typeof value === "string") body[key] = value;
+  const params = new URLSearchParams(raw);
+  params.forEach((value, key) => {
+    body[key] = value;
   });
   return body;
 }
 
-function echoResponse(request: Request) {
-  const echo = new URL(request.url).searchParams.get("zd_echo");
-  if (echo === null) return null;
-  return new Response(echo, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+function expectedSignature(secret: string, body: Record<string, string>) {
+  const concat = Object.keys(body)
+    .filter((key) => key.toLowerCase() !== "signature")
+    .sort()
+    .map((key) => body[key] ?? "")
+    .join("");
+  const md5 = createHash("md5").update(concat).digest("hex");
+  return createHmac("sha1", secret).update(md5).digest("base64");
+}
+
+function signaturesMatch(expected: string, received: string) {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+async function handle(request: Request) {
+  const url = new URL(request.url);
+  if (url.searchParams.has("zd_echo")) {
+    return echoReply(url.searchParams.get("zd_echo") ?? "");
+  }
+
+  let raw = "";
+  if (request.method !== "GET") {
+    raw = await request.text();
+  }
+  const body = parseForm(raw);
+  if (Object.prototype.hasOwnProperty.call(body, "zd_echo")) {
+    return echoReply(body.zd_echo);
+  }
+
+  const secret = process.env.ZADARMA_API_SECRET?.trim();
+  if (!secret) {
+    return NextResponse.json({ error: "server not configured" }, { status: 500 });
+  }
+
+  const signature = request.headers.get("signature");
+  if (!signature) {
+    console.warn("Zadarma webhook: missing signature header");
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  }
+
+  const expected = expectedSignature(secret, body);
+  if (!signaturesMatch(expected, signature)) {
+    console.warn("Zadarma webhook: signature mismatch");
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
+  }
+
+  console.log("Zadarma webhook", body);
+  await ingestZadarmaEvent(body);
+  return new NextResponse("ok", { status: 200 });
 }
 
 export async function GET(request: Request) {
-  return echoResponse(request) ?? NextResponse.json({ ok: true });
+  return handle(request);
 }
 
 export async function POST(request: Request) {
-  const echoed = echoResponse(request);
-  if (echoed) return echoed;
-
-  const body = await parseBody(request);
-  if (body.zd_echo) {
-    return new Response(body.zd_echo, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
-  }
-
-  const config = await getRuntimeConfig();
-  const signature =
-    request.headers.get("signature") || request.headers.get("Signature") || body.signature || null;
-  const event = String(body.event || "").toUpperCase();
-  if (
-    !verifyZadarmaSignature({
-      secret: config.zadarmaApiSecret,
-      signature,
-      payload: zadarmaSignaturePayload(event, body),
-    })
-  ) {
-    return NextResponse.json({ error: "Neplatný podpis Zadarma" }, { status: 401 });
-  }
-
-  const result = await ingestZadarmaEvent(body);
-  return NextResponse.json(result);
+  return handle(request);
 }

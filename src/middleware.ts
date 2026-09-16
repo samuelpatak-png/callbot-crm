@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC = ["/login", "/api/cron", "/api/dialer", "/api/harvest", "/api/twilio"];
+const PUBLIC = ["/login", "/api/cron", "/api/dialer", "/api/harvest", "/api/twilio", "/api/zadarma"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -27,5 +27,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/zadarma|_next/static|_next/image|favicon.ico|login).*)"],
 };
