@@ -88,6 +88,7 @@ enum ActivityType {
 enum VoiceProviderKind {
   STUB
   TWILIO
+  ZADARMA_REALTIME
 }
 
 enum UserRole {
@@ -364,6 +365,12 @@ model AppSettings {
   twilioFromNumber    String?
   openaiApiKey        String?
   openaiRealtimeModel String            @default("gpt-4o-mini")
+  openaiRealtimeVoice String            @default("marin")
+  zadarmaApiKey       String?
+  zadarmaApiSecret    String?
+  zadarmaSipNumber    String?
+  zadarmaSipPassword  String?
+  bridgeServerUrl     String?
   companyName         String            @default("CallBot")
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt

@@ -16,6 +16,7 @@ import { buildCallBriefing, parseObjections } from "./agent-briefing";
 import { rehearseWithChatGpt } from "./openai-agent";
 import { applyCallDebrief } from "./call-debrief";
 import { getRuntimeConfig } from "./settings";
+import { cronSecret } from "./cron-auth";
 
 const phoneSchema = z
   .string()
@@ -218,6 +219,7 @@ export async function placeCallAction(formData: FormData) {
       agentId: session.id,
       direction: "OUTBOUND",
       status: "RINGING",
+      provider: settings.voiceProvider,
       agentInstructions: briefing.instructions,
     },
   });
@@ -232,6 +234,8 @@ export async function placeCallAction(formData: FormData) {
     instructions: briefing.instructions,
     twilioAccountSid: settings.twilioAccountSid,
     twilioAuthToken: settings.twilioAuthToken,
+    bridgeServerUrl: settings.bridgeServerUrl,
+    bridgeSecret: cronSecret(),
   });
 
   await applyCallDebrief({
@@ -418,6 +422,9 @@ export async function saveSettingsAction(formData: FormData) {
   const twilioAccountSid = String(formData.get("twilioAccountSid") || "").trim();
   const twilioAuthToken = String(formData.get("twilioAuthToken") || "").trim();
   const openaiApiKey = String(formData.get("openaiApiKey") || "").trim();
+  const zadarmaApiKey = String(formData.get("zadarmaApiKey") || "").trim();
+  const zadarmaApiSecret = String(formData.get("zadarmaApiSecret") || "").trim();
+  const zadarmaSipPassword = String(formData.get("zadarmaSipPassword") || "").trim();
   await prisma.appSettings.update({
     where: { id: "default" },
     data: {
@@ -427,6 +434,12 @@ export async function saveSettingsAction(formData: FormData) {
       twilioFromNumber: String(formData.get("twilioFromNumber") || "").trim() || current.twilioFromNumber,
       openaiApiKey: openaiApiKey || current.openaiApiKey,
       openaiRealtimeModel: String(formData.get("openaiRealtimeModel") || current.openaiRealtimeModel),
+      openaiRealtimeVoice: String(formData.get("openaiRealtimeVoice") || current.openaiRealtimeVoice || "marin"),
+      zadarmaApiKey: zadarmaApiKey || current.zadarmaApiKey,
+      zadarmaApiSecret: zadarmaApiSecret || current.zadarmaApiSecret,
+      zadarmaSipNumber: String(formData.get("zadarmaSipNumber") || "").trim() || current.zadarmaSipNumber,
+      zadarmaSipPassword: zadarmaSipPassword || current.zadarmaSipPassword,
+      bridgeServerUrl: String(formData.get("bridgeServerUrl") || "").trim() || current.bridgeServerUrl,
       companyName: String(formData.get("companyName") || "CallBot"),
     },
   });

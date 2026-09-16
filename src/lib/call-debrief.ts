@@ -272,6 +272,7 @@ export async function applyCallDebrief(opts: {
   realtimeLoaded?: boolean;
   recordingUrl?: string | null;
   recordingSid?: string | null;
+  capturedEmail?: string | null;
 }) {
   const existing = await prisma.call.findUnique({ where: { id: opts.callId } });
   const recordingUrl = opts.recordingUrl ?? opts.result.recordingUrl ?? existing?.recordingUrl ?? null;
@@ -319,6 +320,9 @@ export async function applyCallDebrief(opts: {
     contactName: opts.contactName,
     apiKey: config.openaiApiKey,
   });
+  if (opts.capturedEmail) {
+    debrief.capturedEmail = opts.capturedEmail;
+  }
 
   const summary = opts.realtimeLoaded
     ? `${debrief.summary} ChatGPT Realtime mal načítaný skript.`

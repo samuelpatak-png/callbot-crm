@@ -1,0 +1,18 @@
+services:
+  asterisk:
+    build: ./asterisk
+    network_mode: host
+    environment:
+      ZADARMA_SIP_NUMBER: ${ZADARMA_SIP_NUMBER}
+      ZADARMA_SIP_PASSWORD: ${ZADARMA_SIP_PASSWORD}
+      ARI_USER: ${ASTERISK_ARI_USER:-callbot}
+      ARI_PASSWORD: ${ASTERISK_ARI_PASSWORD:-changeme}
+    restart: unless-stopped
+
+  bridge:
+    build: .
+    network_mode: host
+    env_file: .env
+    depends_on:
+      - asterisk
+    restart: unless-stopped

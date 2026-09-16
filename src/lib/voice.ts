@@ -14,6 +14,8 @@ export type PlaceCallInput = {
   instructions?: string | null;
   twilioAccountSid?: string | null;
   twilioAuthToken?: string | null;
+  bridgeServerUrl?: string | null;
+  bridgeSecret?: string | null;
 };
 
 export type PlaceCallResult = {
@@ -194,7 +196,61 @@ export class TwilioVoiceProvider implements VoiceProvider {
   }
 }
 
+export class ZadarmaRealtimeVoiceProvider implements VoiceProvider {
+  kind: VoiceProviderKind = "ZADARMA_REALTIME";
+
+  async placeCall(input: PlaceCallInput): Promise<PlaceCallResult> {
+    const bridge = (input.bridgeServerUrl || process.env.BRIDGE_SERVER_URL || "").replace(/\/$/, "");
+    const secret = input.bridgeSecret || process.env.CRON_SECRET || process.env.AUTH_SECRET || "";
+    if (!bridge) {
+      return {
+        provider: "ZADARMA_REALTIME",
+        providerCallSid: `zadarma_failed_${Date.now()}`,
+        status: "FAILED",
+        outcome: "zadarma_error",
+        durationSec: 0,
+        summary: "Bridge server URL nie je nastavená. Doplňte ju v Nastaveniach alebo v BRIDGE_SERVER_URL.",
+      };
+    }
+
+    const response = await fetch(`${bridge}/call`, {
+      method: "POST",
+      headers: {
+        Authorization: secret ? `Bearer ${secret}` : "",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: input.to,
+        callId: input.callId,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return {
+        provider: "ZADARMA_REALTIME",
+        providerCallSid: `zadarma_failed_${Date.now()}`,
+        status: "FAILED",
+        outcome: "zadarma_error",
+        durationSec: 0,
+        summary: `Zadarma / ChatGPT Live hovor sa nepodarilo spustiť: ${text.slice(0, 280)}`,
+      };
+    }
+
+    const data = (await response.json().catch(() => ({}))) as { sid?: string; status?: string };
+    return {
+      provider: "ZADARMA_REALTIME",
+      providerCallSid: data.sid || `zadarma_${input.callId || Date.now()}`,
+      status: "RINGING",
+      outcome: data.status || "queued",
+      durationSec: 0,
+      summary: `Živý hovor cez Zadarma a ChatGPT Realtime na ${input.to} je zaradený.`,
+    };
+  }
+}
+
 export function getVoiceProvider(kind: VoiceProviderKind): VoiceProvider {
   if (kind === "TWILIO") return new TwilioVoiceProvider();
+  if (kind === "ZADARMA_REALTIME") return new ZadarmaRealtimeVoiceProvider();
   return new StubVoiceProvider();
 }

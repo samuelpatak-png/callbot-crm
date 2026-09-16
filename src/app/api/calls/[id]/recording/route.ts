@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getRuntimeConfig } from "@/lib/settings";
+import { isBlobRecordingUrl } from "@/lib/zadarma";
 
 export async function GET(
   _request: Request,
@@ -26,23 +27,20 @@ export async function GET(
 
   const remote = call.recordingUrl?.startsWith("http") ? call.recordingUrl : null;
   if (remote) {
-    const config = await getRuntimeConfig();
-    const headers: HeadersInit = {};
-    if (config.twilioAccountSid && config.twilioAuthToken && remote.includes("twilio.com")) {
-      headers.Authorization = `Basic ${Buffer.from(
-        `${config.twilioAccountSid}:${config.twilioAuthToken}`,
-      ).toString("base64")}`;
-    }
-    const audio = await fetch(remote, { headers });
-    if (!audio.ok) {
+    const audio = await fetchRemoteRecording(remote);
+    if (!audio) {
       return NextResponse.json({ error: "Nahrávku sa nepodarilo stiahnuť" }, { status: 502 });
     }
     return new NextResponse(audio.body, {
       headers: {
-        "Content-Type": audio.headers.get("content-type") || "audio/mpeg",
+        "Content-Type": audio.headers.get("content-type") || guessAudioType(remote),
         "Cache-Control": "private, max-age=3600",
       },
     });
+  }
+
+  if (call.provider === "ZADARMA_REALTIME") {
+    return new NextResponse(null, { status: 204 });
   }
 
   const transcript = call.transcript?.trim();
@@ -71,4 +69,32 @@ export async function GET(
   }
 
   return new NextResponse(null, { status: 204 });
+}
+
+function guessAudioType(url: string) {
+  if (url.endsWith(".wav")) return "audio/wav";
+  if (url.endsWith(".ogg")) return "audio/ogg";
+  return "audio/mpeg";
+}
+
+async function fetchRemoteRecording(remote: string) {
+  const config = await getRuntimeConfig();
+  const headers: HeadersInit = {};
+  const twilio = remote.includes("twilio.com");
+  const blob = isBlobRecordingUrl(remote);
+
+  if (twilio && config.twilioAccountSid && config.twilioAuthToken) {
+    headers.Authorization = `Basic ${Buffer.from(
+      `${config.twilioAccountSid}:${config.twilioAuthToken}`,
+    ).toString("base64")}`;
+  }
+
+  let audio = await fetch(remote, { headers });
+  if (!audio.ok && blob && process.env.BLOB_READ_WRITE_TOKEN) {
+    audio = await fetch(remote, {
+      headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+    });
+  }
+  if (!audio.ok) return null;
+  return audio;
 }

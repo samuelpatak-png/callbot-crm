@@ -11,7 +11,8 @@ Aplikácia beží na **Vercel** na adrese [https://callbot-crm.vercel.app](https
 - pipeline dealov (úspešný hovor otvorí lead)
 - kampane so **spusti / pozastav / zastav**, pracovné dni a hodiny
 - zber čísiel zo zastaraných .sk webov (až po súhlase so spracovaním)
-- živý hovor cez Twilio: agent počúva, odpovedá podľa skriptu, nahrávka a zápis do CRM
+- živý hovor cez Twilio (Gather + ChatGPT) alebo **Zadarma + ChatGPT Live** na VPS
+- skutočné MP3 nahrávky hovorov (Vercel Blob) a prepis v CRM
 - história hovorov: hľadanie, štatistiky, CSV, ručná oprava úspešnosti
 - follow-up úlohy sa po termíne vracajú do fronty
 - import CSV
@@ -33,7 +34,9 @@ Pozri `.env.example`. Povinné:
 - `CRON_SECRET`
 - `APP_URL` — produkčná URL (musí sedieť s Twilio webhookmi)
 
-Voliteľné: `TWILIO_*`, `OPENAI_API_KEY`.
+Voliteľné: `TWILIO_*`, `OPENAI_API_KEY`, `ZADARMA_*`, `BRIDGE_SERVER_URL`, `BLOB_READ_WRITE_TOKEN`.
+
+Webhook Zadarma: `https://callbot-crm.vercel.app/api/zadarma/call-status` (v Zadarma zapnite PBX notifikácie). Živý audio most beží v `/bridge-server` na VPS.
 
 ## Git a návraty
 

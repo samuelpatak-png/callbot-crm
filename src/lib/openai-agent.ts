@@ -1,9 +1,110 @@
+export const REALTIME_DEFAULT_MODEL = "gpt-realtime";
+export const REALTIME_DEFAULT_VOICE = "marin";
+
+export function resolveRealtimeModel(model?: string | null) {
+  const value = (model || "").trim();
+  if (!value || value === "gpt-4o-mini" || value === "gpt-4o") return REALTIME_DEFAULT_MODEL;
+  if (value.includes("gpt-4o-realtime")) return REALTIME_DEFAULT_MODEL;
+  return value;
+}
+
+export function realtimeSessionConfig(opts: {
+  model?: string | null;
+  instructions: string;
+  voice?: string | null;
+}) {
+  const model = resolveRealtimeModel(opts.model);
+  const voice = opts.voice?.trim() || REALTIME_DEFAULT_VOICE;
+  return {
+    type: "realtime" as const,
+    model,
+    instructions: opts.instructions,
+    output_modalities: ["audio"] as const,
+    audio: {
+      input: {
+        format: { type: "audio/pcmu" as const },
+        transcription: { model: "gpt-4o-mini-transcribe" },
+        turn_detection: {
+          type: "server_vad" as const,
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 600,
+          create_response: true,
+          interrupt_response: true,
+        },
+      },
+      output: {
+        format: { type: "audio/pcmu" as const },
+        voice,
+      },
+    },
+  };
+}
+
+type RealtimeSessionOk = {
+  ok: true;
+  sessionId: string | null;
+  clientSecret: string | null;
+  model: string;
+  voice: string;
+};
+
+type RealtimeSessionErr = {
+  ok: false;
+  error: string;
+};
+
+function parseRealtimeSessionPayload(raw: string, model: string, voice: string): RealtimeSessionOk | null {
+  try {
+    const data = JSON.parse(raw) as {
+      id?: string;
+      value?: string;
+      client_secret?: { value?: string } | string;
+      session?: { id?: string };
+    };
+    const clientSecret =
+      (typeof data.client_secret === "string" ? data.client_secret : data.client_secret?.value) ||
+      data.value ||
+      null;
+    const sessionId = data.session?.id || data.id || null;
+    if (!clientSecret && !sessionId) return null;
+    return { ok: true, sessionId, clientSecret, model, voice };
+  } catch {
+    return null;
+  }
+}
+
 export async function createRealtimeSession(opts: {
   apiKey: string;
   model: string;
   instructions: string;
-}) {
-  const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
+  voice?: string | null;
+  inputAudioFormat?: "g711_ulaw" | "audio/pcmu" | "pcm16";
+  outputAudioFormat?: "g711_ulaw" | "audio/pcmu" | "pcm16";
+}): Promise<RealtimeSessionOk | RealtimeSessionErr> {
+  const session = realtimeSessionConfig({
+    model: opts.model,
+    instructions: opts.instructions,
+    voice: opts.voice,
+  });
+  void opts.inputAudioFormat;
+  void opts.outputAudioFormat;
+
+  const ga = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ session }),
+  });
+  const gaRaw = await ga.text();
+  if (ga.ok) {
+    const parsed = parseRealtimeSessionPayload(gaRaw, session.model, session.audio.output.voice);
+    if (parsed) return parsed;
+  }
+
+  const beta = await fetch("https://api.openai.com/v1/realtime/sessions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${opts.apiKey}`,
@@ -11,38 +112,72 @@ export async function createRealtimeSession(opts: {
       "OpenAI-Beta": "realtime=v1",
     },
     body: JSON.stringify({
-      model: opts.model || "gpt-4o-realtime-preview",
-      voice: "coral",
+      model: session.model,
+      voice: session.audio.output.voice,
       instructions: opts.instructions,
+      modalities: ["audio", "text"],
+      input_audio_format: "g711_ulaw",
+      output_audio_format: "g711_ulaw",
+      input_audio_transcription: { model: "whisper-1" },
     }),
   });
-  const raw = await response.text();
-  if (!response.ok) {
-    return {
-      ok: false as const,
-      error: raw.slice(0, 400) || `OpenAI Realtime ${response.status}`,
-    };
+  const betaRaw = await beta.text();
+  if (beta.ok) {
+    const parsed = parseRealtimeSessionPayload(betaRaw, session.model, session.audio.output.voice);
+    if (parsed) return parsed;
+    return { ok: true, sessionId: null, clientSecret: null, model: session.model, voice: session.audio.output.voice };
   }
-  const data = JSON.parse(raw) as { id?: string };
-  return { ok: true as const, sessionId: data.id || null };
+
+  return {
+    ok: false,
+    error: (ga.ok ? betaRaw : gaRaw).slice(0, 400) || `OpenAI Realtime ${ga.status}`,
+  };
 }
 
 export async function loadPlaybookIntoRealtime(
-  settings: { openaiApiKey: string | null; openaiRealtimeModel: string },
+  settings: {
+    openaiApiKey: string | null;
+    openaiRealtimeModel: string;
+    openaiRealtimeVoice?: string | null;
+  },
   instructions: string,
 ) {
   if (!settings.openaiApiKey) {
-    return { sessionId: null as string | null, loaded: false, error: "OpenAI kľúč nie je v nastaveniach." };
+    return {
+      sessionId: null as string | null,
+      clientSecret: null as string | null,
+      loaded: false,
+      error: "OpenAI kľúč nie je v nastaveniach.",
+      model: resolveRealtimeModel(settings.openaiRealtimeModel),
+      voice: settings.openaiRealtimeVoice?.trim() || REALTIME_DEFAULT_VOICE,
+    };
   }
   const result = await createRealtimeSession({
     apiKey: settings.openaiApiKey,
     model: settings.openaiRealtimeModel,
     instructions,
+    voice: settings.openaiRealtimeVoice,
+    inputAudioFormat: "g711_ulaw",
+    outputAudioFormat: "g711_ulaw",
   });
   if (!result.ok) {
-    return { sessionId: null as string | null, loaded: false, error: result.error };
+    return {
+      sessionId: null as string | null,
+      clientSecret: null as string | null,
+      loaded: false,
+      error: result.error,
+      model: resolveRealtimeModel(settings.openaiRealtimeModel),
+      voice: settings.openaiRealtimeVoice?.trim() || REALTIME_DEFAULT_VOICE,
+    };
   }
-  return { sessionId: result.sessionId, loaded: true, error: null as string | null };
+  return {
+    sessionId: result.sessionId,
+    clientSecret: result.clientSecret,
+    loaded: true,
+    error: null as string | null,
+    model: result.model,
+    voice: result.voice,
+  };
 }
 
 export async function rehearseWithChatGpt(opts: {

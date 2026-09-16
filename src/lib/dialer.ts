@@ -108,6 +108,7 @@ export async function tickDialer() {
       campaignId: campaign.id,
       direction: "OUTBOUND",
       status: "RINGING",
+      provider: settings.voiceProvider,
       agentInstructions: briefing.instructions,
     },
   });
@@ -124,6 +125,8 @@ export async function tickDialer() {
     instructions: briefing.instructions,
     twilioAccountSid: settings.twilioAccountSid,
     twilioAuthToken: settings.twilioAuthToken,
+    bridgeServerUrl: settings.bridgeServerUrl,
+    bridgeSecret: cronSecret(),
   });
 
   if (result.status === "RINGING") {

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <title>CallBot CRM — ako to funguje</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;600;700&display=swap" />
+  <style>
+    @page { size: A4; margin: 11mm 12mm 12mm; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      color: #0f172a;
+      font: 9.4pt/1.38 "Fira Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: #fff;
+    }
+    h1 { font-size: 18.5pt; letter-spacing: -0.03em; margin: 0 0 4px; line-height: 1.15; }
+    h2 {
+      font-size: 8pt;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #2563eb;
+      margin: 13px 0 7px;
+      font-weight: 700;
+    }
+    p { margin: 0 0 7px; }
+    .kicker {
+      font-size: 8pt;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #2563eb;
+      font-weight: 700;
+      margin: 0 0 3px;
+    }
+    .lead {
+      font-size: 11pt;
+      color: #334155;
+      max-width: 48rem;
+      margin-bottom: 10px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #0f172a;
+      margin-bottom: 10px;
+    }
+    .meta { color: #64748b; font-size: 8.5pt; text-align: right; line-height: 1.4; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+    .step {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-top: 3px solid #2563eb;
+      padding: 8px 8px 7px;
+      min-height: 92px;
+    }
+    .step:nth-child(4) { border-top-color: #059669; }
+    .step:nth-child(5) { border-top-color: #0f172a; }
+    .n {
+      display: inline-block;
+      font-size: 7.5pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #2563eb;
+      margin-bottom: 3px;
+    }
+    .step strong { display: block; font-size: 10pt; margin-bottom: 3px; }
+    .step span { color: #475569; font-size: 8.4pt; }
+    table { width: 100%; border-collapse: collapse; font-size: 8.7pt; }
+    th, td { border-bottom: 1px solid #e2e8f0; padding: 5.5px 8px; text-align: left; vertical-align: top; }
+    th {
+      background: #0f172a;
+      color: #fff;
+      font-weight: 650;
+      font-size: 8pt;
+      letter-spacing: 0.04em;
+      border: 0;
+    }
+    td:first-child { font-weight: 700; width: 22%; white-space: nowrap; }
+    td:nth-child(2) { width: 22%; color: #1d4ed8; font-weight: 600; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .benefits {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+    .b {
+      border: 1px solid #e2e8f0;
+      padding: 8px 10px;
+      background: #fff;
+    }
+    .b strong { display: block; font-size: 10pt; margin-bottom: 2px; }
+    .b span { color: #475569; font-size: 8.6pt; }
+    .note {
+      margin-top: 11px;
+      background: #eff6ff;
+      border-left: 4px solid #2563eb;
+      padding: 8px 11px;
+      font-size: 8.8pt;
+      color: #1e3a5f;
+    }
+    footer {
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 7.8pt;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="kicker">Interný prehľad pre vedenie</p>
+      <h1>CallBot CRM — ako to funguje</h1>
+    </div>
+    <p class="meta">
+      16. 9. 2026<br />
+      Bez technického žargónu<br />
+      callbot-crm.vercel.app
+    </p>
+  </header>
+
+  <p class="lead">
+    CallBot je kancelária na odchádzajúce hovory: nájde, koho volať, zavolá podľa skriptu,
+    po hovore všetko zapíše. Človek vidí kontakty, nahrávky a ďalšie kroky v prehliadači.
+  </p>
+
+  <h2>Ako ide jeden hovor</h2>
+  <div class="flow">
+    <div class="step">
+      <div class="n">01</div>
+      <strong>Koho voláme</strong>
+      <span>Kontakt z kampane, zoznamu alebo z karty. Systém vie aj pozbierať čísla z webu.</span>
+    </div>
+    <div class="step">
+      <div class="n">02</div>
+      <strong>Kedy voláme</strong>
+      <span>Kampaň ide v pracovných hodinách, po jednom, s opakovaním, ak niekto nezdvihne.</span>
+    </div>
+    <div class="step">
+      <div class="n">03</div>
+      <strong>Linka vytočí</strong>
+      <span>Zadarma je len telefón — číslo a spojenie so zákazníkom. Nerozpráva za nás.</span>
+    </div>
+    <div class="step">
+      <div class="n">04</div>
+      <strong>Hlas hovorí</strong>
+      <span>ChatGPT počúva a odpovedá podľa nášho skriptu: ponuka, námietky, cieľ hovoru.</span>
+    </div>
+    <div class="step">
+      <div class="n">05</div>
+      <strong>Karta sa doplní</strong>
+      <span>Nahrávka, prepis, zhrnutie, e-mail, úloha, príležitosť. Obchodník to nemusí pisať z hlavy.</span>
+    </div>
+  </div>
+
+  <h2>Čo robí ktorá služba</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Služba</th>
+        <th>V obraze firmy</th>
+        <th>Čo z toho máme</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>CallBot</td>
+        <td>Kancelária</td>
+        <td>Miesto, kde ľudia pracujú: kontakty, kampane, skript, história, štatistiky.</td>
+      </tr>
+      <tr>
+        <td>Vercel</td>
+        <td>Budova</td>
+        <td>Web beží v prehliadači, bez inštalácie. Nová verzia z kódu sa sem nasadí sama.</td>
+      </tr>
+      <tr>
+        <td>Neon</td>
+        <td>Kartotéka</td>
+        <td>Uložené kontakty, hovory, poznámky, heslá, nastavenia.</td>
+      </tr>
+      <tr>
+        <td>GitHub</td>
+        <td>Archív</td>
+        <td>História programu. Vieme sa vrátiť k predošlej verzii.</td>
+      </tr>
+      <tr>
+        <td>Zadarma</td>
+        <td>Telefónna linka</td>
+        <td>Naše číslo a spojenie so zákazníkom. Nie je to umelá inteligencia.</td>
+      </tr>
+      <tr>
+        <td>OpenAI / ChatGPT</td>
+        <td>Obchodník na linke</td>
+        <td>Hovorí podľa skriptu. Po hovore spraví zhrnutie: záujem, e-mail, ďalší krok.</td>
+      </tr>
+      <tr>
+        <td>VPS (most)</td>
+        <td>Prevodník</td>
+        <td>Spojí telefón s ChatGPT naživo a nahrá obe strany hovoru. Beží na vlastnom serveri.</td>
+      </tr>
+      <tr>
+        <td>Vercel Blob</td>
+        <td>Trezor nahrávok</td>
+        <td>Skutočné MP3 hovoru, ktoré sa dá v CRM vypočuť.</td>
+      </tr>
+      <tr>
+        <td>Twilio</td>
+        <td>Záložná linka</td>
+        <td>Starší spôsob volania. Stále sa dá zapnúť v nastaveniach, ak by Zadarma vypadla.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Čo z toho má firma</h2>
+  <div class="benefits">
+    <div class="b">
+      <strong>Menej prepisovania</strong>
+      <span>Po hovore sa karta doplní sama: zhrnutie, nahrávka, úloha, follow-up.</span>
+    </div>
+    <div class="b">
+      <strong>Rovnaký príbeh na každom hovore</strong>
+      <span>Skript držíme my. Hlas sa nemá vymýšľať ceny ani sľuby, ktoré v briefingu nie sú.</span>
+    </div>
+    <div class="b">
+      <strong>Dôkaz, nielen pocit</strong>
+      <span>Nahrávka a prepis. Nie „volal som, nemal záujem“ bez stopy.</span>
+    </div>
+    <div class="b">
+      <strong>Ľudia riešia obchody</strong>
+      <span>Systém vytáča a zapisuje. Človek berie výnimky, záujemcov a korekcie výsledku.</span>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Čo ostáva naše:</strong> koho voláme, kedy voláme, čo smieme povedať, a koho už nevolať.
+    ChatGPT je hlas podľa pravidiel, nie šéf predaja. Zadarma je len rúra na hlas.
+    Kontakty a nahrávky sú v našom CRM.
+  </div>
+
+  <footer>
+    <span>CallBot CRM · interný prehľad · 16. 9. 2026</span>
+    <span>https://callbot-crm.vercel.app</span>
+  </footer>
+</body>
+</html>

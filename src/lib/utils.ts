@@ -124,6 +124,7 @@ export function callOutcomeLabel(outcome?: string | null) {
     busy: "Obsadené",
     failed: "Zlyhalo",
     twilio_error: "Chyba Twilio",
+    zadarma_error: "Chyba Zadarma",
     not_interested: "Bez záujmu",
     dnc: "Nevolať",
     callback: "Spätné volanie",

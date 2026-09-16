@@ -25,8 +25,9 @@ export default async function SettingsPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Nastavenia</h1>
         <p className="text-sm text-slate-500">
-          Kľúče radšej dajte do Vercelu. V databáze sa neukazujú. Živý hovor ide cez Twilio: agent počúva,
-          odpovedá podľa skriptu a po hovore sa zapíše CRM.{" "}
+          Kľúče radšej dajte do Vercelu. V databáze sa neukazujú. Živý hovor môže ísť cez Twilio
+          (Gather) alebo cez Zadarma + ChatGPT Live na VPS. Po hovore sa zapíše CRM a prehrá
+          skutočná nahrávka.{" "}
           <Link href="/skript" className="text-primary underline-offset-2 hover:underline">
             Skript
           </Link>
@@ -69,6 +70,7 @@ export default async function SettingsPage({
               <select name="voiceProvider" defaultValue={settings.voiceProvider} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3">
                 <option value="STUB">Simulácia</option>
                 <option value="TWILIO">Twilio — živý hovor</option>
+                <option value="ZADARMA_REALTIME">Zadarma — ChatGPT Live</option>
               </select>
             </label>
             <label className="text-sm font-medium">
@@ -88,8 +90,32 @@ export default async function SettingsPage({
               <input name="openaiApiKey" type="password" placeholder={maskSecret(secretStored(settings.openaiApiKey), config.openaiFromEnv)} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" autoComplete="off" />
             </label>
             <label className="text-sm font-medium">
-              Model pre odpovede v hovore
-              <input name="openaiRealtimeModel" defaultValue={settings.openaiRealtimeModel} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+              OpenAI Realtime model
+              <input name="openaiRealtimeModel" defaultValue={settings.openaiRealtimeModel} placeholder="gpt-realtime" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              Hlas ChatGPT Live
+              <input name="openaiRealtimeVoice" defaultValue={settings.openaiRealtimeVoice} placeholder="marin" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              Zadarma API kľúč {config.zadarmaFromEnv ? "(Vercel)" : ""}
+              <input name="zadarmaApiKey" placeholder={maskSecret(secretStored(settings.zadarmaApiKey), config.zadarmaFromEnv)} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" autoComplete="off" />
+            </label>
+            <label className="text-sm font-medium">
+              Zadarma API secret
+              <input name="zadarmaApiSecret" type="password" placeholder={maskSecret(secretStored(settings.zadarmaApiSecret), config.zadarmaFromEnv)} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" autoComplete="off" />
+            </label>
+            <label className="text-sm font-medium">
+              Zadarma SIP číslo
+              <input name="zadarmaSipNumber" defaultValue={settings.zadarmaSipNumber ?? ""} placeholder="12345-100" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
+            </label>
+            <label className="text-sm font-medium">
+              Zadarma SIP heslo
+              <input name="zadarmaSipPassword" type="password" placeholder={maskSecret(secretStored(settings.zadarmaSipPassword), false)} className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" autoComplete="off" />
+            </label>
+            <label className="text-sm font-medium">
+              Bridge server URL
+              <input name="bridgeServerUrl" defaultValue={settings.bridgeServerUrl ?? ""} placeholder="https://bridge.vas-vps.example" className="mt-1 min-h-11 w-full rounded-lg border border-border px-3" />
             </label>
             <button className="min-h-11 rounded-lg bg-primary px-4 font-semibold text-white">Uložiť nastavenia</button>
           </form>
@@ -128,7 +154,7 @@ export default async function SettingsPage({
           </form>
         </>
       ) : (
-        <p className="text-sm text-slate-500">Kľúče Twilio a OpenAI vie meniť len správca.</p>
+        <p className="text-sm text-slate-500">Kľúče Twilio, Zadarma a OpenAI vie meniť len správca.</p>
       )}
     </div>
   );
