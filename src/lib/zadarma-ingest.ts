@@ -2,7 +2,7 @@ import type { CallStatus, CallDirection } from "@prisma/client";
 import { prisma } from "./prisma";
 import { applyCallDebrief } from "./call-debrief";
 import { finalizeCampaignMember } from "./dialer";
-import { normalizeZadarmaPhone } from "./zadarma";
+import { normalizeZadarmaPhone, zadarmaRecordingUrl } from "./zadarma";
 import type { PlaceCallResult } from "./voice";
 
 function asStatus(disposition: string, event: string): CallStatus {
@@ -93,6 +93,31 @@ export async function ingestZadarmaEvent(body: Record<string, string>) {
       },
     });
     return { ok: true, status, event };
+  }
+
+  if (event === "NOTIFY_RECORD") {
+    const apiKey = process.env.ZADARMA_API_KEY?.trim();
+    const apiSecret = process.env.ZADARMA_API_SECRET?.trim();
+    if (apiKey && apiSecret) {
+      const recordingUrl = await zadarmaRecordingUrl({
+        apiKey,
+        apiSecret,
+        callId: body.call_id_with_rec,
+        pbxCallId: pbxCallId,
+      });
+      if (recordingUrl) {
+        await prisma.call.update({
+          where: { id: call.id },
+          data: {
+            recordingUrl,
+            recordingSid: body.call_id_with_rec || call.recordingSid,
+            provider: "ZADARMA_REALTIME",
+            providerCallSid: pbxCallId || call.providerCallSid,
+          },
+        });
+      }
+    }
+    return { ok: true, event };
   }
 
   const terminal = ["NOTIFY_END", "NOTIFY_OUT_END"].includes(event);

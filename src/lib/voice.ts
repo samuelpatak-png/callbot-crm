@@ -1,6 +1,7 @@
 import type { CallStatus, VoiceProviderKind } from "@prisma/client";
 import { appUrl } from "./utils";
 import { demoSpokenEmail } from "./call-capture";
+import { zadarmaPredictedCallback } from "./zadarma";
 
 export type PlaceCallInput = {
   to: string;
@@ -202,47 +203,79 @@ export class ZadarmaRealtimeVoiceProvider implements VoiceProvider {
   async placeCall(input: PlaceCallInput): Promise<PlaceCallResult> {
     const bridge = (input.bridgeServerUrl || process.env.BRIDGE_SERVER_URL || "").replace(/\/$/, "");
     const secret = input.bridgeSecret || process.env.CRON_SECRET || process.env.AUTH_SECRET || "";
-    if (!bridge) {
+    if (bridge) {
+      const response = await fetch(`${bridge}/call`, {
+        method: "POST",
+        headers: {
+          Authorization: secret ? `Bearer ${secret}` : "",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: input.to,
+          callId: input.callId,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        return {
+          provider: "ZADARMA_REALTIME",
+          providerCallSid: `zadarma_failed_${Date.now()}`,
+          status: "FAILED",
+          outcome: "zadarma_error",
+          durationSec: 0,
+          summary: `Zadarma / ChatGPT Live hovor sa nepodarilo spustiť: ${text.slice(0, 280)}`,
+        };
+      }
+
+      const data = (await response.json().catch(() => ({}))) as { sid?: string; status?: string };
+      return {
+        provider: "ZADARMA_REALTIME",
+        providerCallSid: data.sid || `zadarma_${input.callId || Date.now()}`,
+        status: "RINGING",
+        outcome: data.status || "queued",
+        durationSec: 0,
+        summary: `Živý hovor cez Zadarma a ChatGPT Realtime na ${input.to} je zaradený.`,
+      };
+    }
+
+    const apiKey = process.env.ZADARMA_API_KEY?.trim();
+    const apiSecret = process.env.ZADARMA_API_SECRET?.trim();
+    const sipNumber = process.env.ZADARMA_SIP_NUMBER?.trim();
+    if (!apiKey || !apiSecret || !sipNumber) {
       return {
         provider: "ZADARMA_REALTIME",
         providerCallSid: `zadarma_failed_${Date.now()}`,
         status: "FAILED",
         outcome: "zadarma_error",
         durationSec: 0,
-        summary: "Bridge server URL nie je nastavená. Doplňte ju v Nastaveniach alebo v BRIDGE_SERVER_URL.",
+        summary: "Chýbajú Zadarma kľúče alebo SIP číslo.",
       };
     }
 
-    const response = await fetch(`${bridge}/call`, {
-      method: "POST",
-      headers: {
-        Authorization: secret ? `Bearer ${secret}` : "",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to: input.to,
-        callId: input.callId,
-      }),
+    const callback = await zadarmaPredictedCallback({
+      apiKey,
+      apiSecret,
+      from: sipNumber,
+      to: input.to,
+      sip: sipNumber.includes("-") ? sipNumber.split("-").pop() : sipNumber,
     });
-
-    if (!response.ok) {
-      const text = await response.text();
+    if (!callback.ok) {
       return {
         provider: "ZADARMA_REALTIME",
         providerCallSid: `zadarma_failed_${Date.now()}`,
         status: "FAILED",
         outcome: "zadarma_error",
         durationSec: 0,
-        summary: `Zadarma / ChatGPT Live hovor sa nepodarilo spustiť: ${text.slice(0, 280)}`,
+        summary: `Zadarma callback sa nepodaril: ${callback.raw.slice(0, 280)}`,
       };
     }
 
-    const data = (await response.json().catch(() => ({}))) as { sid?: string; status?: string };
     return {
       provider: "ZADARMA_REALTIME",
-      providerCallSid: data.sid || `zadarma_${input.callId || Date.now()}`,
+      providerCallSid: `zadarma_${input.callId || Date.now()}`,
       status: "RINGING",
-      outcome: data.status || "queued",
+      outcome: "queued",
       durationSec: 0,
       summary: `Živý hovor cez Zadarma a ChatGPT Realtime na ${input.to} je zaradený.`,
     };

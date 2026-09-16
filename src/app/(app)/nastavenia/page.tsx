@@ -26,8 +26,7 @@ export default async function SettingsPage({
         <h1 className="text-2xl font-semibold tracking-tight">Nastavenia</h1>
         <p className="text-sm text-slate-500">
           Kľúče radšej dajte do Vercelu. V databáze sa neukazujú. Živý hovor môže ísť cez Twilio
-          (Gather) alebo cez Zadarma + ChatGPT Live na VPS. Po hovore sa zapíše CRM a prehrá
-          skutočná nahrávka.{" "}
+          alebo cez Zadarma + ChatGPT Live. Po hovore sa zapíše CRM a prehrá skutočná nahrávka.{" "}
           <Link href="/skript" className="text-primary underline-offset-2 hover:underline">
             Skript
           </Link>

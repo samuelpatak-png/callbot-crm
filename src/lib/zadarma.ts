@@ -114,6 +114,69 @@ export function sipToNumber(phone: string) {
   return phone.replace(/^\+/, "");
 }
 
+export async function zadarmaPredictedCallback(opts: {
+  apiKey: string;
+  apiSecret: string;
+  from: string;
+  to: string;
+  sip?: string | null;
+}) {
+  const params: Record<string, string> = {
+    from: opts.from,
+    to: sipToNumber(opts.to),
+    predicted: "1",
+  };
+  if (opts.sip?.trim()) params.sip = opts.sip.trim();
+  return zadarmaRequest<{ status?: string; from?: string; to?: string }>({
+    apiKey: opts.apiKey,
+    apiSecret: opts.apiSecret,
+    methodPath: "/v1/request/callback/",
+    params,
+  });
+}
+
+export async function zadarmaSetPbxSipUri(opts: {
+  apiKey: string;
+  apiSecret: string;
+  pbxNumber: string;
+  destination: string;
+}) {
+  return zadarmaRequest({
+    apiKey: opts.apiKey,
+    apiSecret: opts.apiSecret,
+    methodPath: "/v1/pbx/redirection/",
+    http: "POST",
+    params: {
+      pbx_number: opts.pbxNumber,
+      status: "on",
+      type: "sip_uri",
+      destination: opts.destination,
+      condition: "always",
+    },
+  });
+}
+
+export async function zadarmaRecordingUrl(opts: {
+  apiKey: string;
+  apiSecret: string;
+  callId?: string;
+  pbxCallId?: string;
+}) {
+  const params: Record<string, string> = { lifetime: "5184000" };
+  if (opts.callId) params.call_id = opts.callId;
+  if (opts.pbxCallId) params.pbx_call_id = opts.pbxCallId;
+  const result = await zadarmaRequest<{ status?: string; link?: string; url?: string }>({
+    apiKey: opts.apiKey,
+    apiSecret: opts.apiSecret,
+    methodPath: "/v1/pbx/record/request/",
+    params,
+  });
+  const link =
+    (result.data && (result.data.link || result.data.url)) ||
+    (typeof result.data === "object" && result.data && "link" in result.data ? String(result.data.link || "") : "");
+  return link || null;
+}
+
 export function isBlobRecordingUrl(url: string) {
   return /vercel-storage\.com|blob\.vercel-storage\.com/i.test(url);
 }
