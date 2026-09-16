@@ -1,11 +1,15 @@
 import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { handleRealtimeIncomingCall, monitorRealtimeSipCall } from "@/lib/openai-sip";
-import { verifyOpenAiWebhook } from "@/lib/openai-webhook";
+import { verifyOpenAiWebhookDetailed } from "@/lib/openai-webhook";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
 
 type IncomingEvent = {
   type?: string;
@@ -18,8 +22,12 @@ type IncomingEvent = {
 
 export async function POST(request: Request) {
   const raw = await request.text();
-  if (!verifyOpenAiWebhook(raw, request, process.env.OPENAI_WEBHOOK_SECRET || null)) {
-    return NextResponse.json({ error: "invalid signature" }, { status: 400 });
+  const verify = verifyOpenAiWebhookDetailed(raw, request, process.env.OPENAI_WEBHOOK_SECRET || null);
+  if (!verify.ok) {
+    if (verify.reason === "missing_headers") {
+      return NextResponse.json({ error: "missing signature headers" }, { status: 400 });
+    }
+    return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
   let event: IncomingEvent;

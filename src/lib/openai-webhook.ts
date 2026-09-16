@@ -6,13 +6,27 @@ function signingKey(secret: string) {
 }
 
 export function verifyOpenAiWebhook(rawBody: string, request: Request, secret: string | null) {
-  if (!secret?.trim()) return true;
+  return verifyOpenAiWebhookDetailed(rawBody, request, secret).ok;
+}
+
+export type WebhookVerifyResult =
+  | { ok: true }
+  | { ok: false; reason: "missing_headers" | "invalid_timestamp" | "invalid_signature" };
+
+export function verifyOpenAiWebhookDetailed(
+  rawBody: string,
+  request: Request,
+  secret: string | null,
+): WebhookVerifyResult {
+  if (!secret?.trim()) return { ok: true };
   const id = request.headers.get("webhook-id");
   const timestamp = request.headers.get("webhook-timestamp");
   const signature = request.headers.get("webhook-signature");
-  if (!id || !timestamp || !signature) return false;
+  if (!id || !timestamp || !signature) return { ok: false, reason: "missing_headers" };
   const ts = Number(timestamp);
-  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    return { ok: false, reason: "invalid_timestamp" };
+  }
   const expected = createHmac("sha256", signingKey(secret))
     .update(`${id}.${timestamp}.${rawBody}`)
     .digest("base64");
@@ -21,7 +35,7 @@ export function verifyOpenAiWebhook(rawBody: string, request: Request, secret: s
     const [, sig] = part.split(",", 2);
     if (!sig) continue;
     const provided = Buffer.from(sig);
-    if (provided.length === expectedBuf.length && timingSafeEqual(provided, expectedBuf)) return true;
+    if (provided.length === expectedBuf.length && timingSafeEqual(provided, expectedBuf)) return { ok: true };
   }
-  return false;
+  return { ok: false, reason: "invalid_signature" };
 }
